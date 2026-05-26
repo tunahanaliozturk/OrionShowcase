@@ -6,7 +6,7 @@
 
 **Architecture:** Clean Architecture, 4 layers, one-way dependency flow (Api → Application → Infrastructure → Domain). MediatR CQRS with pipeline behaviors for Validation, Logging, OrionKey idempotency, OrionAudit audit. EF Core 8 + Postgres for persistence. JWT bearer auth (dev-grade). OpenTelemetry exports to Jaeger; Serilog to Seq.
 
-**Tech Stack:** .NET 8, ASP.NET Core Minimal API, EF Core 8 + Npgsql, MediatR 12.4, FluentValidation 11, Serilog, OpenTelemetry, xUnit + FluentAssertions + Testcontainers Postgres. Six Orion NuGet packages: OrionGuard.AspNetCore 6.4.2, OrionAudit 0.6.1, OrionLock.Postgres 0.2.1, OrionKey 0.4.1, OrionPatch.EntityFrameworkCore 0.1.1, OrionVault.EntityFrameworkCore 0.1.1.
+**Tech Stack:** .NET 8, ASP.NET Core Minimal API, EF Core 8 + Npgsql, MediatR 12.4, FluentValidation 11, Serilog, OpenTelemetry, xUnit + FluentAssertions + Testcontainers Postgres. Six Orion NuGet packages: OrionGuard.AspNetCore 6.4.2, OrionAudit 0.6.2, OrionLock.Postgres 0.2.3, OrionKey 0.4.1, OrionPatch.EntityFrameworkCore 0.1.1, OrionVault.EntityFrameworkCore 0.1.2.
 
 **Reference spec:** `docs/superpowers/specs/2026-05-26-orionshowcase-v0.1.0-design.md`
 
@@ -219,14 +219,14 @@ Note: no `<PackageReadmeFile>`, no `<PackageIcon>`, no `<PackageLicenseExpressio
   <ItemGroup>
     <!-- Orion family (cream-bg patch versions just shipped) -->
     <PackageVersion Include="Moongazing.OrionGuard.AspNetCore" Version="6.4.2" />
-    <PackageVersion Include="Moongazing.OrionAudit" Version="0.6.1" />
-    <PackageVersion Include="Moongazing.OrionLock" Version="0.2.1" />
-    <PackageVersion Include="Moongazing.OrionLock.Postgres" Version="0.2.1" />
+    <PackageVersion Include="Moongazing.OrionAudit" Version="0.6.2" />
+    <PackageVersion Include="Moongazing.OrionLock" Version="0.2.3" />
+    <PackageVersion Include="Moongazing.OrionLock.Postgres" Version="0.2.3" />
     <PackageVersion Include="Moongazing.OrionKey" Version="0.4.1" />
     <PackageVersion Include="Moongazing.OrionPatch" Version="0.1.1" />
     <PackageVersion Include="Moongazing.OrionPatch.EntityFrameworkCore" Version="0.1.1" />
-    <PackageVersion Include="Moongazing.OrionVault" Version="0.1.1" />
-    <PackageVersion Include="Moongazing.OrionVault.EntityFrameworkCore" Version="0.1.1" />
+    <PackageVersion Include="OrionVault" Version="0.1.2" />
+    <PackageVersion Include="OrionVault.EntityFrameworkCore" Version="0.1.2" />
     <!-- Framework + libs -->
     <PackageVersion Include="MediatR" Version="12.4.1" />
     <PackageVersion Include="FluentValidation" Version="11.10.0" />
@@ -348,8 +348,8 @@ dotnet sln add test/Moongazing.OrionShowcase.IntegrationTests/Moongazing.OrionSh
     <PackageReference Include="Moongazing.OrionLock.Postgres" />
     <PackageReference Include="Moongazing.OrionPatch" />
     <PackageReference Include="Moongazing.OrionPatch.EntityFrameworkCore" />
-    <PackageReference Include="Moongazing.OrionVault" />
-    <PackageReference Include="Moongazing.OrionVault.EntityFrameworkCore" />
+    <PackageReference Include="OrionVault" />
+    <PackageReference Include="OrionVault.EntityFrameworkCore" />
     <ProjectReference Include="..\Moongazing.OrionShowcase.Application\Moongazing.OrionShowcase.Application.csproj" />
   </ItemGroup>
 </Project>
@@ -2572,7 +2572,7 @@ b.Property(c => c.Email).HasColumnName("email").IsEncrypted();
 b.Property(c => c.Phone).HasColumnName("phone").IsEncrypted();
 ```
 
-Add `using Moongazing.OrionVault.EntityFrameworkCore;` at the top for the `IsEncrypted()` extension.
+Add `using OrionVault.EntityFrameworkCore;` at the top for the `IsEncrypted()` extension.
 
 Note: encrypted columns end up as `bytea` in Postgres (provider's native blob). `HasMaxLength()` is dropped because it does not apply to bytea.
 
@@ -2590,8 +2590,8 @@ using Moongazing.OrionShowcase.Domain.Repositories;
 using Moongazing.OrionShowcase.Infrastructure.Persistence;
 using Moongazing.OrionShowcase.Infrastructure.Persistence.Repositories;
 using Moongazing.OrionShowcase.Infrastructure.Time;
-using Moongazing.OrionVault.DependencyInjection;
-using Moongazing.OrionVault.EntityFrameworkCore.DependencyInjection;
+using OrionVault.DependencyInjection;
+using OrionVault.EntityFrameworkCore.DependencyInjection;
 
 public static class InfrastructureServiceCollectionExtensions
 {
@@ -2793,7 +2793,7 @@ public sealed class EfAuditWriter : IAuditWriter
 }
 ```
 
-Note: the exact OrionAudit 0.6.1 API surface (`IAuditLog`, `AuditEntry`) may differ — implementer adapts in this task to whatever the actual package exposes. The intent is: write a single audit row per command per outcome.
+Note: the exact OrionAudit 0.6.2 API surface (`IAuditLog`, `AuditEntry`) may differ — implementer adapts in this task to whatever the actual package exposes. The intent is: write a single audit row per command per outcome.
 
 - [ ] **Step 2: OrionKeyIdempotencyStore implementation**
 
@@ -3539,7 +3539,7 @@ public static class OpenTelemetryExtensions
                 .AddSource("Moongazing.OrionLock")
                 .AddSource("Moongazing.OrionKey")
                 .AddSource("Moongazing.OrionPatch")
-                .AddSource("Moongazing.OrionVault")
+                .AddSource("OrionVault")
                 .AddAspNetCoreInstrumentation()
                 .AddEntityFrameworkCoreInstrumentation()
                 .AddNpgsql()
@@ -3550,7 +3550,7 @@ public static class OpenTelemetryExtensions
                 .AddMeter("Moongazing.OrionLock")
                 .AddMeter("Moongazing.OrionKey")
                 .AddMeter("Moongazing.OrionPatch")
-                .AddMeter("Moongazing.OrionVault")
+                .AddMeter("OrionVault")
                 .AddAspNetCoreInstrumentation()
                 .AddOtlpExporter(o => o.Endpoint = otlp));
         return services;
