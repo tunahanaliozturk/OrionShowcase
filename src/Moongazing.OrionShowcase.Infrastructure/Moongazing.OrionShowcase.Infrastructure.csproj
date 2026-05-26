@@ -1,0 +1,22 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <IsPackable>false</IsPackable>
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="Microsoft.EntityFrameworkCore" />
+    <PackageReference Include="Microsoft.EntityFrameworkCore.Relational" />
+    <PackageReference Include="Microsoft.EntityFrameworkCore.Design" />
+    <PackageReference Include="Npgsql.EntityFrameworkCore.PostgreSQL" />
+    <PackageReference Include="Microsoft.Extensions.Hosting" />
+    <PackageReference Include="OrionAudit" />
+    <PackageReference Include="OrionKey" />
+    <PackageReference Include="OrionLock" />
+    <PackageReference Include="OrionLock.Postgres" />
+    <PackageReference Include="OrionPatch" />
+    <PackageReference Include="OrionPatch.EntityFrameworkCore" />
+    <PackageReference Include="OrionVault" />
+    <PackageReference Include="OrionVault.EntityFrameworkCore" />
+    <ProjectReference Include="..\Moongazing.OrionShowcase.Application\Moongazing.OrionShowcase.Application.csproj" />
+  </ItemGroup>
+</Project>
