@@ -1,5 +1,52 @@
+using Microsoft.AspNetCore.Diagnostics.HealthChecks;
+using Microsoft.EntityFrameworkCore;
+using Moongazing.OrionShowcase.Api.Authentication;
+using Moongazing.OrionShowcase.Api.Health;
+using Moongazing.OrionShowcase.Api.Observability;
+using Moongazing.OrionShowcase.Api.Swagger;
+using Moongazing.OrionShowcase.Application.DependencyInjection;
+using Moongazing.OrionShowcase.Infrastructure.DependencyInjection;
+using Moongazing.OrionShowcase.Infrastructure.Persistence;
+
 var builder = WebApplication.CreateBuilder(args);
+builder.UseSerilogForOrion();
+
+builder.Services
+    .AddApplication()
+    .AddInfrastructure(builder.Configuration)
+    .AddJwtBearerAuth(builder.Configuration)
+    .AddProblemDetails()
+    .AddEndpointsApiExplorer()
+    .AddSwagger()
+    .AddOrionShowcaseHealthChecks();
+// OrionGuard middleware + OpenTelemetry added in Task 14
+// Endpoints added in Task 13
+
 var app = builder.Build();
-app.MapGet("/", () => "OrionShowcase scaffolded; real composition in Task 12.");
+
+// Apply EF migrations on startup (banking DB will be created from EF model in Task 15 via docker)
+using (var scope = app.Services.CreateScope())
+{
+    var db = scope.ServiceProvider.GetRequiredService<BankingDbContext>();
+    if (db.Database.IsRelational())
+    {
+        // db.Database.Migrate();   // enabled once migrations exist (Task 15)
+    }
+}
+
+if (app.Environment.IsDevelopment())
+{
+    app.UseSwagger();
+    app.UseSwaggerUI();
+}
+
+app.UseAuthentication();
+app.UseAuthorization();
+// app.MapBankingEndpoints() added in Task 13
+app.MapHealthChecks("/health/live");
+app.MapHealthChecks("/health/ready", new HealthCheckOptions { Predicate = h => h.Tags.Contains("ready") });
+
+app.MapGet("/", () => "OrionShowcase API running. See /swagger.");
 app.Run();
+
 public partial class Program;

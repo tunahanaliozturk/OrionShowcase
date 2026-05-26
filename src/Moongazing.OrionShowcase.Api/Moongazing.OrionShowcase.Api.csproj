@@ -4,7 +4,8 @@
     <IsPackable>false</IsPackable>
     <UserSecretsId>orionshowcase-dev</UserSecretsId>
     <!-- CA1515: Program is intentionally public so IntegrationTests can use WebApplicationFactory<Program>. -->
-    <NoWarn>$(NoWarn);CA1515</NoWarn>
+    <!-- CA1305: Serilog sink configuration extensions don't accept IFormatProvider; format provider is plumbed via the logger pipeline. -->
+    <NoWarn>$(NoWarn);CA1515;CA1305</NoWarn>
   </PropertyGroup>
   <ItemGroup>
     <PackageReference Include="Microsoft.AspNetCore.Authentication.JwtBearer" />
