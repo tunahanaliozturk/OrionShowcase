@@ -1,6 +1,7 @@
 using Microsoft.AspNetCore.Diagnostics.HealthChecks;
 using Microsoft.EntityFrameworkCore;
 using Moongazing.OrionShowcase.Api.Authentication;
+using Moongazing.OrionShowcase.Api.Endpoints;
 using Moongazing.OrionShowcase.Api.Health;
 using Moongazing.OrionShowcase.Api.Observability;
 using Moongazing.OrionShowcase.Api.Swagger;
@@ -42,7 +43,7 @@ if (app.Environment.IsDevelopment())
 
 app.UseAuthentication();
 app.UseAuthorization();
-// app.MapBankingEndpoints() added in Task 13
+app.MapBankingEndpoints();
 app.MapHealthChecks("/health/live");
 app.MapHealthChecks("/health/ready", new HealthCheckOptions { Predicate = h => h.Tags.Contains("ready") });
 
