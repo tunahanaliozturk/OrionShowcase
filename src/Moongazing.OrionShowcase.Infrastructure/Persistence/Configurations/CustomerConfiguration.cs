@@ -4,9 +4,13 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Metadata.Builders;
 using Moongazing.OrionShowcase.Domain.Customers;
 using Moongazing.OrionShowcase.Domain.ValueObjects;
-
 public sealed class CustomerConfiguration : IEntityTypeConfiguration<Customer>
 {
+    // OrionVault encryption annotation key. IsEncrypted() extension only supports
+    // PropertyBuilder<string>/<byte[]>; for value-converted Tckn we apply the same
+    // annotation manually so the OrionVault model customizer recognises it.
+    private const string EncryptedAnnotation = "OrionVault:Encrypted";
+
     public void Configure(EntityTypeBuilder<Customer> builder)
     {
         ArgumentNullException.ThrowIfNull(builder);
@@ -21,10 +25,10 @@ public sealed class CustomerConfiguration : IEntityTypeConfiguration<Customer>
         builder.Property(c => c.NationalId)
             .HasConversion(v => v.Value, s => new Tckn(s))
             .HasColumnName("national_id")
-            .HasMaxLength(11);
+            .HasAnnotation(EncryptedAnnotation, true);   // OrionVault: stored as bytea
 
-        builder.Property(c => c.Email).HasColumnName("email").HasMaxLength(256);
-        builder.Property(c => c.Phone).HasColumnName("phone").HasMaxLength(32);
+        builder.Property(c => c.Email).HasColumnName("email").HasAnnotation(EncryptedAnnotation, true);
+        builder.Property(c => c.Phone).HasColumnName("phone").HasAnnotation(EncryptedAnnotation, true);
         builder.Property(c => c.RegisteredAt).HasColumnName("registered_at");
 
         builder.Ignore(c => c.DomainEvents);
