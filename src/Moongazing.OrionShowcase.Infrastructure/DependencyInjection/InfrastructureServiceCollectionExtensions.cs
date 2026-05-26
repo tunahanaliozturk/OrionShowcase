@@ -10,11 +10,13 @@ using Moongazing.OrionLock.Postgres;
 using Moongazing.OrionPatch.DependencyInjection;
 using Moongazing.OrionPatch.EntityFrameworkCore.DependencyInjection;
 using Moongazing.OrionShowcase.Application.Abstractions;
+using Moongazing.OrionShowcase.Application.Settlement;
 using Moongazing.OrionShowcase.Domain.Abstractions;
 using Moongazing.OrionShowcase.Domain.Accounts;
 using Moongazing.OrionShowcase.Domain.Customers;
 using Moongazing.OrionShowcase.Domain.Repositories;
 using Moongazing.OrionShowcase.Infrastructure.Audit;
+using Moongazing.OrionShowcase.Infrastructure.HostedServices;
 using Moongazing.OrionShowcase.Infrastructure.Idempotency;
 using Moongazing.OrionShowcase.Infrastructure.Outbox;
 using Moongazing.OrionShowcase.Infrastructure.Persistence;
@@ -99,6 +101,8 @@ public static class InfrastructureServiceCollectionExtensions
         services.AddScoped<IIdempotencyStore, OrionKeyIdempotencyStore>();
 
         // DailySettlementService added in Task 11
+        services.AddScoped<RunDailySettlement>();
+        services.AddHostedService<DailySettlementService>();
 
         return services;
     }
