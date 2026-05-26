@@ -1,6 +1,7 @@
 namespace Moongazing.OrionShowcase.Infrastructure.Persistence;
 
 using Microsoft.EntityFrameworkCore;
+using Moongazing.OrionPatch.EntityFrameworkCore;
 using Moongazing.OrionShowcase.Domain.Accounts;
 using Moongazing.OrionShowcase.Domain.Customers;
 
@@ -16,5 +17,6 @@ public sealed class BankingDbContext : DbContext
     {
         ArgumentNullException.ThrowIfNull(modelBuilder);
         modelBuilder.ApplyConfigurationsFromAssembly(typeof(BankingDbContext).Assembly);
+        modelBuilder.ApplyOrionPatchConfiguration();
     }
 }

@@ -3,8 +3,11 @@ namespace Moongazing.OrionShowcase.Infrastructure.DependencyInjection;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using Moongazing.OrionPatch.DependencyInjection;
+using Moongazing.OrionPatch.EntityFrameworkCore.DependencyInjection;
 using Moongazing.OrionShowcase.Domain.Abstractions;
 using Moongazing.OrionShowcase.Domain.Repositories;
+using Moongazing.OrionShowcase.Infrastructure.Outbox;
 using Moongazing.OrionShowcase.Infrastructure.Persistence;
 using Moongazing.OrionShowcase.Infrastructure.Persistence.Repositories;
 using Moongazing.OrionShowcase.Infrastructure.Time;
@@ -25,11 +28,24 @@ public static class InfrastructureServiceCollectionExtensions
             o.ActiveKeyId = 1;
         }).UseEntityFrameworkCore<BankingDbContext>();
 
+        // OrionPatch core + EF Core storage backend bound to BankingDbContext.
+        // Must run before AddDbContext so OrionPatchSaveChangesInterceptor is resolvable
+        // inside UseOrionPatch(sp). UseEntityFrameworkCore registers IOutbox as scoped
+        // (bound to the resolved BankingDbContext via ConditionalWeakTable).
+        services.AddOrionPatch().UseEntityFrameworkCore<BankingDbContext>();
+
+        // Domain-event-to-outbox bridge. Scoped because it depends on the scoped IOutbox.
+        services.AddScoped<DomainEventOutboxAdapter>();
+
         services.AddDbContext<BankingDbContext>((sp, opt) =>
         {
             opt.UseNpgsql(cfg.GetConnectionString("Banking"));
             opt.UseOrionVault(sp);
-            // OrionPatch wiring added in Task 9
+            // Order matters: the domain-event adapter must enqueue events into IOutbox
+            // BEFORE OrionPatch's interceptor drains the buffer into the change tracker
+            // during SavingChanges. EF Core invokes interceptors in attachment order.
+            opt.AddInterceptors(sp.GetRequiredService<DomainEventOutboxAdapter>());
+            opt.UseOrionPatch(sp);
         });
 
         services.AddScoped<IAccountRepository, AccountRepository>();
