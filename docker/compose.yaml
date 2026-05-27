@@ -1,0 +1,49 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: banking
+      POSTGRES_USER: bank
+      POSTGRES_PASSWORD: bank
+    ports: ["5432:5432"]
+    volumes:
+      - ./postgres-init.sql:/docker-entrypoint-initdb.d/init.sql
+      - banking-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD", "pg_isready", "-U", "bank"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  seq:
+    image: datalust/seq:latest
+    environment: { ACCEPT_EULA: Y }
+    ports: ["5341:80"]
+    volumes: [seq-data:/data]
+
+  jaeger:
+    image: jaegertracing/all-in-one:latest
+    environment: { COLLECTOR_OTLP_ENABLED: "true" }
+    ports: ["16686:16686", "4317:4317"]
+
+  api:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.api
+    depends_on:
+      postgres: { condition: service_healthy }
+      seq: { condition: service_started }
+      jaeger: { condition: service_started }
+    environment:
+      ConnectionStrings__Banking: "Host=postgres;Database=banking;Username=bank;Password=bank"
+      Seq__ServerUrl: "http://seq:80"
+      Otel__Endpoint: "http://jaeger:4317"
+      Vault__Key1: "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA="
+      Jwt__SigningKey: "demo-signing-key-min-32-chars-for-hs256-algorithm"
+      OrionKey__WorkerId: "1"
+      ASPNETCORE_ENVIRONMENT: Development
+    ports: ["5000:8080"]
+
+volumes:
+  banking-data:
+  seq-data:

@@ -36,7 +36,7 @@ using (var scope = app.Services.CreateScope())
     var db = scope.ServiceProvider.GetRequiredService<BankingDbContext>();
     if (db.Database.IsRelational())
     {
-        // db.Database.Migrate();   // enabled once migrations exist (Task 15)
+        db.Database.Migrate();
     }
 }
 
