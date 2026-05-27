@@ -1,6 +1,5 @@
 namespace Moongazing.OrionShowcase.Api.Endpoints.Accounts;
 
-using FluentValidation;
 using MediatR;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
@@ -39,7 +38,6 @@ internal static class GetBalanceEndpoint
                 ? Results.Ok(result.Value)
                 : Results.NotFound();
         }
-        catch (ValidationException ex) { return ValidationProblemFilter.Handle(ex); }
         catch (Exception ex) when (DomainExceptionFilter.TryHandle(ex) is { } r) { return r; }
     }
 }

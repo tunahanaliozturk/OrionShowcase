@@ -1,8 +1,8 @@
 namespace Moongazing.OrionShowcase.Application.Accounts.Commands.FreezeAccount;
 
-using FluentValidation;
+using Moongazing.OrionGuard.Compatibility;
 
-public sealed class FreezeAccountValidator : AbstractValidator<FreezeAccountCommand>
+public sealed class FreezeAccountValidator : FluentStyleValidator<FreezeAccountCommand>
 {
     public FreezeAccountValidator()
     {

@@ -1,8 +1,8 @@
 namespace Moongazing.OrionShowcase.Application.Accounts.Commands.CloseAccount;
 
-using FluentValidation;
+using Moongazing.OrionGuard.Compatibility;
 
-public sealed class CloseAccountValidator : AbstractValidator<CloseAccountCommand>
+public sealed class CloseAccountValidator : FluentStyleValidator<CloseAccountCommand>
 {
     public CloseAccountValidator()
     {

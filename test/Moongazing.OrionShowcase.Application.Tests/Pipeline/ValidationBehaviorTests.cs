@@ -1,6 +1,8 @@
 using FluentAssertions;
-using FluentValidation;
 using MediatR;
+using Moongazing.OrionGuard.Compatibility;
+using Moongazing.OrionGuard.Core;
+using Moongazing.OrionGuard.DependencyInjection;
 using Moongazing.OrionShowcase.Application.Pipeline;
 using Xunit;
 
@@ -10,7 +12,7 @@ public class ValidationBehaviorTests
 {
     public sealed record SampleRequest(string Name);
 
-    private sealed class FailingValidator : AbstractValidator<SampleRequest>
+    private sealed class FailingValidator : FluentStyleValidator<SampleRequest>
     {
         public FailingValidator()
         {
@@ -19,17 +21,17 @@ public class ValidationBehaviorTests
     }
 
     [Fact]
-    public async Task Throws_ValidationException_when_request_invalid()
+    public async Task Throws_AggregateValidationException_when_request_invalid()
     {
-        var sut = new ValidationBehavior<SampleRequest, Unit>(new[] { new FailingValidator() });
+        var sut = new ValidationBehavior<SampleRequest, Unit>(new IValidator<SampleRequest>[] { new FailingValidator() });
         var act = async () => await sut.Handle(new SampleRequest(""), () => Task.FromResult(Unit.Value), default);
-        await act.Should().ThrowAsync<ValidationException>();
+        await act.Should().ThrowAsync<AggregateValidationException>();
     }
 
     [Fact]
     public async Task Calls_next_when_request_valid()
     {
-        var sut = new ValidationBehavior<SampleRequest, Unit>(new[] { new FailingValidator() });
+        var sut = new ValidationBehavior<SampleRequest, Unit>(new IValidator<SampleRequest>[] { new FailingValidator() });
         var result = await sut.Handle(new SampleRequest("ali"), () => Task.FromResult(Unit.Value), default);
         result.Should().Be(Unit.Value);
     }

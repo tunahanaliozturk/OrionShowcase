@@ -1,9 +1,9 @@
 namespace Moongazing.OrionShowcase.Application.Accounts.Commands.OpenAccount;
 
-using FluentValidation;
+using Moongazing.OrionGuard.Compatibility;
 using Moongazing.OrionShowcase.Domain.ValueObjects;
 
-public sealed class OpenAccountValidator : AbstractValidator<OpenAccountCommand>
+public sealed class OpenAccountValidator : FluentStyleValidator<OpenAccountCommand>
 {
     public OpenAccountValidator()
     {

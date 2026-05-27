@@ -1,5 +1,6 @@
-using FluentValidation;
 using MediatR;
+using Moongazing.OrionGuard.Core;
+using Moongazing.OrionGuard.DependencyInjection;
 
 namespace Moongazing.OrionShowcase.Application.Pipeline;
 
@@ -18,12 +19,11 @@ public sealed class ValidationBehavior<TRequest, TResponse> : IPipelineBehavior<
             return await next().ConfigureAwait(false);
         }
 
-        var context = new ValidationContext<TRequest>(request);
-        var results = await Task.WhenAll(_validators.Select(v => v.ValidateAsync(context, cancellationToken))).ConfigureAwait(false);
+        var results = await Task.WhenAll(_validators.Select(v => v.ValidateAsync(request, cancellationToken))).ConfigureAwait(false);
         var failures = results.SelectMany(r => r.Errors).Where(f => f is not null).ToList();
         if (failures.Count > 0)
         {
-            throw new ValidationException(failures);
+            throw new AggregateValidationException(failures);
         }
 
         return await next().ConfigureAwait(false);

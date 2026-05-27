@@ -4,6 +4,7 @@
   </PropertyGroup>
   <ItemGroup>
     <!-- Orion family (corrected, all live on NuGet as of today) -->
+    <PackageVersion Include="OrionGuard" Version="6.4.2" />
     <PackageVersion Include="OrionGuard.AspNetCore" Version="6.4.2" />
     <PackageVersion Include="OrionAudit" Version="0.6.2" />
     <PackageVersion Include="OrionLock" Version="0.2.3" />
@@ -15,8 +16,6 @@
     <PackageVersion Include="OrionVault.EntityFrameworkCore" Version="0.1.2" />
     <!-- Framework + libs -->
     <PackageVersion Include="MediatR" Version="12.4.1" />
-    <PackageVersion Include="FluentValidation" Version="11.10.0" />
-    <PackageVersion Include="FluentValidation.DependencyInjectionExtensions" Version="11.10.0" />
     <PackageVersion Include="Microsoft.EntityFrameworkCore" Version="9.0.1" />
     <PackageVersion Include="Microsoft.EntityFrameworkCore.Design" Version="9.0.1" />
     <PackageVersion Include="Microsoft.EntityFrameworkCore.Relational" Version="9.0.1" />

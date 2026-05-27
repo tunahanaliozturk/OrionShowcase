@@ -1,6 +1,5 @@
 namespace Moongazing.OrionShowcase.Api.Endpoints.Accounts;
 
-using FluentValidation;
 using MediatR;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
@@ -43,7 +42,6 @@ internal static class WithdrawEndpoint
                 ? Results.Ok(new WithdrawResponse(result.Value!.NewBalance))
                 : Results.Problem(detail: result.Error, statusCode: 409);
         }
-        catch (ValidationException ex) { return ValidationProblemFilter.Handle(ex); }
         catch (Exception ex) when (DomainExceptionFilter.TryHandle(ex) is { } r) { return r; }
     }
 

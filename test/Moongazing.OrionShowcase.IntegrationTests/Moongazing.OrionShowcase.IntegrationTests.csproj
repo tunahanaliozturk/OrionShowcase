@@ -3,7 +3,17 @@
     <TargetFramework>net8.0</TargetFramework>
     <IsPackable>false</IsPackable>
     <IsTestProject>true</IsTestProject>
-    <NoWarn>$(NoWarn);CA1707</NoWarn>
+    <!--
+      CA1707: underscores in test method names are conventional for the Given_When_Then form.
+      CA2007: xUnit synchronisation context is single-threaded by default, ConfigureAwait(false)
+              inside [Fact] methods is flagged by xUnit1030; suppressing CA2007 lets us drop
+              the call in tests without losing the analyzer in production code.
+      CA1303: literal strings used in assertions and inline test data do not need localisation.
+      CA1515: WebApplicationFactory<Program> subclass and xUnit IClassFixture types must be public.
+      CA1812: deserialisation-only DTO records are flagged as "never instantiated" even though
+              System.Net.Http.Json constructs them via reflection.
+    -->
+    <NoWarn>$(NoWarn);CA1707;CA2007;CA1303;CA1515;CA1812</NoWarn>
   </PropertyGroup>
   <ItemGroup>
     <PackageReference Include="Microsoft.NET.Test.Sdk" />

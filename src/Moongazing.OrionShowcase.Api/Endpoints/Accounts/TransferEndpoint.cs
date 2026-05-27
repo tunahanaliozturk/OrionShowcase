@@ -1,6 +1,5 @@
 namespace Moongazing.OrionShowcase.Api.Endpoints.Accounts;
 
-using FluentValidation;
 using MediatR;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
@@ -44,7 +43,6 @@ internal static class TransferEndpoint
                 ? Results.Ok(new TransferResponse(result.Value!.TransferId, result.Value.NewSourceBalance))
                 : Results.Problem(detail: result.Error, statusCode: 409);
         }
-        catch (ValidationException ex) { return ValidationProblemFilter.Handle(ex); }
         catch (Exception ex) when (DomainExceptionFilter.TryHandle(ex) is { } r) { return r; }
     }
 

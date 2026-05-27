@@ -1,9 +1,9 @@
 namespace Moongazing.OrionShowcase.Application.Accounts.Commands.DepositMoney;
 
-using FluentValidation;
+using Moongazing.OrionGuard.Compatibility;
 using Moongazing.OrionShowcase.Domain.ValueObjects;
 
-public sealed class DepositMoneyValidator : AbstractValidator<DepositMoneyCommand>
+public sealed class DepositMoneyValidator : FluentStyleValidator<DepositMoneyCommand>
 {
     public DepositMoneyValidator()
     {

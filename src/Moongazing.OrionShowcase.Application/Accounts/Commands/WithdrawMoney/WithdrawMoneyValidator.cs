@@ -1,9 +1,9 @@
 namespace Moongazing.OrionShowcase.Application.Accounts.Commands.WithdrawMoney;
 
-using FluentValidation;
+using Moongazing.OrionGuard.Compatibility;
 using Moongazing.OrionShowcase.Domain.ValueObjects;
 
-public sealed class WithdrawMoneyValidator : AbstractValidator<WithdrawMoneyCommand>
+public sealed class WithdrawMoneyValidator : FluentStyleValidator<WithdrawMoneyCommand>
 {
     public WithdrawMoneyValidator()
     {
