@@ -1,6 +1,7 @@
 namespace Moongazing.OrionShowcase.Application.Accounts.Commands.OpenAccount;
 
 using MediatR;
+using Moongazing.OrionGuard.Core;
 using Moongazing.OrionShowcase.Application.Common;
 using Moongazing.OrionShowcase.Domain.Abstractions;
 using Moongazing.OrionShowcase.Domain.Accounts;
@@ -25,7 +26,7 @@ public sealed class OpenAccountHandler
         OpenAccountCommand request,
         CancellationToken cancellationToken)
     {
-        ArgumentNullException.ThrowIfNull(request);
+        Ensure.NotNull(request);
 
         var iban = new Iban(request.Iban);
         var opening = new Money(request.OpeningAmount, request.Currency);

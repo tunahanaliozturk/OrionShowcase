@@ -1,6 +1,7 @@
 namespace Moongazing.OrionShowcase.Domain.Tests.ValueObjects;
 
 using FluentAssertions;
+using Moongazing.OrionGuard.Core;
 using Moongazing.OrionShowcase.Domain.ValueObjects;
 using Xunit;
 
@@ -10,6 +11,7 @@ public class MoneyTests
     public void Constructor_throws_when_amount_negative()
     {
         var act = () => new Money(-1m, Currency.TRY);
+        // Ensure.InRange preserves the standard ArgumentOutOfRangeException contract.
         act.Should().Throw<ArgumentOutOfRangeException>();
     }
 
@@ -27,7 +29,9 @@ public class MoneyTests
         var a = new Money(100m, Currency.TRY);
         var b = new Money(50m, Currency.USD);
         var act = () => { var _ = a + b; };
-        act.Should().Throw<InvalidOperationException>().WithMessage("*currency*");
+        // OrionGuard Contract.Invariant surfaces cross-currency arithmetic violations
+        // as ContractException ("Invariant violated: ...").
+        act.Should().Throw<ContractException>().WithMessage("*currency*");
     }
 
     [Fact]
@@ -36,6 +40,7 @@ public class MoneyTests
         var a = new Money(50m, Currency.TRY);
         var b = new Money(100m, Currency.TRY);
         var act = () => { var _ = a - b; };
-        act.Should().Throw<InvalidOperationException>().WithMessage("*negative*");
+        // Contract.Requires surfaces the negative-amount rule as a precondition failure.
+        act.Should().Throw<ContractException>().WithMessage("*negative*");
     }
 }

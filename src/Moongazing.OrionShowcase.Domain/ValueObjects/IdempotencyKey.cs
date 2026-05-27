@@ -1,14 +1,16 @@
 namespace Moongazing.OrionShowcase.Domain.ValueObjects;
 
+using Moongazing.OrionGuard.Core;
+
 public readonly record struct IdempotencyKey
 {
     public string Value { get; }
     public IdempotencyKey(string value)
     {
-        if (string.IsNullOrWhiteSpace(value))
-            throw new ArgumentException("IdempotencyKey must not be empty.", nameof(value));
-        if (value.Length > 128)
-            throw new ArgumentException("IdempotencyKey must be 128 characters or fewer.", nameof(value));
+        // Ensure.NotNullOrWhiteSpace -> ArgumentException (standard contract).
+        Ensure.NotNullOrWhiteSpace(value);
+        // Length cap is a structural rule. Ensure.InRange -> ArgumentOutOfRangeException.
+        Ensure.InRange(value.Length, 1, 128);
         Value = value;
     }
 }

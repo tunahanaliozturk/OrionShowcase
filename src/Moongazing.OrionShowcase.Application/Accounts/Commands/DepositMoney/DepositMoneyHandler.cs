@@ -1,6 +1,7 @@
 namespace Moongazing.OrionShowcase.Application.Accounts.Commands.DepositMoney;
 
 using MediatR;
+using Moongazing.OrionGuard.Core;
 using Moongazing.OrionShowcase.Application.Common;
 using Moongazing.OrionShowcase.Domain.Abstractions;
 using Moongazing.OrionShowcase.Domain.Accounts;
@@ -25,7 +26,7 @@ public sealed class DepositMoneyHandler
         DepositMoneyCommand request,
         CancellationToken cancellationToken)
     {
-        ArgumentNullException.ThrowIfNull(request);
+        Ensure.NotNull(request);
 
         var account = await _accounts.GetAsync(request.AccountId, cancellationToken).ConfigureAwait(false);
         if (account is null)

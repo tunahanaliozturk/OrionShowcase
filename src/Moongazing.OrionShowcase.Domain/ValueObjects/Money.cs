@@ -1,5 +1,7 @@
 namespace Moongazing.OrionShowcase.Domain.ValueObjects;
 
+using Moongazing.OrionGuard.Core;
+
 public sealed record Money
 {
     public decimal Amount { get; }
@@ -7,8 +9,9 @@ public sealed record Money
 
     public Money(decimal amount, Currency currency)
     {
-        if (amount < 0m)
-            throw new ArgumentOutOfRangeException(nameof(amount), "Money amount must be non-negative.");
+        // Use Ensure.InRange so we preserve the standard ArgumentOutOfRangeException
+        // contract that callers (and tests) rely on for negative amounts.
+        Ensure.InRange(amount, 0m, decimal.MaxValue);
         Amount = decimal.Round(amount, 2, MidpointRounding.ToEven);
         Currency = currency;
     }
@@ -25,8 +28,9 @@ public sealed record Money
     {
         EnsureSameCurrency(a, b);
         var result = a.Amount - b.Amount;
-        if (result < 0m)
-            throw new InvalidOperationException("Money subtraction would produce a negative amount.");
+        // Domain invariant: Money cannot be negative. Contract.Requires keeps the
+        // arithmetic operator declarative and surfaces a clear semantic violation.
+        Contract.Requires(result >= 0m, "Money subtraction would produce a negative amount.");
         return new Money(result, a.Currency);
     }
 
@@ -56,16 +60,20 @@ public sealed record Money
 
     public static int Compare(Money a, Money b)
     {
-        ArgumentNullException.ThrowIfNull(a);
+        // FastGuard.NotNull uses [MethodImpl(AggressiveInlining)] -- well suited for
+        // hot paths like operators and comparators.
+        FastGuard.NotNull(a, nameof(a));
         return a.CompareTo(b);
     }
 
     private static void EnsureSameCurrency(Money a, Money b)
     {
-        ArgumentNullException.ThrowIfNull(a);
-        ArgumentNullException.ThrowIfNull(b);
-        if (a.Currency != b.Currency)
-            throw new InvalidOperationException(
-                $"Cannot operate on Money values with different currency: {a.Currency} vs {b.Currency}.");
+        // Hot path: both operands flow through here from every Money operator.
+        FastGuard.NotNull(a, nameof(a));
+        FastGuard.NotNull(b, nameof(b));
+        // Invariant: cross-currency arithmetic is meaningless and must fail loudly.
+        Contract.Invariant(
+            a.Currency == b.Currency,
+            $"Cannot operate on Money values with different currency: {a.Currency} vs {b.Currency}.");
     }
 }

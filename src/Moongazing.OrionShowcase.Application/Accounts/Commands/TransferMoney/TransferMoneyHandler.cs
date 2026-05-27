@@ -2,6 +2,7 @@ namespace Moongazing.OrionShowcase.Application.Accounts.Commands.TransferMoney;
 
 using System.Globalization;
 using MediatR;
+using Moongazing.OrionGuard.Core;
 using Moongazing.OrionLock;
 using Moongazing.OrionShowcase.Application.Common;
 using Moongazing.OrionShowcase.Domain.Abstractions;
@@ -41,7 +42,7 @@ public sealed class TransferMoneyHandler
         TransferMoneyCommand request,
         CancellationToken cancellationToken)
     {
-        ArgumentNullException.ThrowIfNull(request);
+        Ensure.NotNull(request);
 
         // Sort the two account ids so two concurrent transfers between the same
         // pair always acquire the locks in the same order. This avoids the classic

@@ -1,0 +1,12 @@
+root = true
+
+# Inform CA1062 about OrionGuard's null-validation methods so the analyzer
+# recognises Ensure.NotNull / Guard.AgainstNull / FastGuard.NotNull / Contract.Requires
+# as legitimate parameter-null checks. Without this, switching from
+# ArgumentNullException.ThrowIfNull (which CA1062 knows out of the box) to a
+# third-party guard library produces a flood of CA1062 false positives.
+#
+# Format: pipe-separated method names or fully-qualified MethodName(SymbolDisplayFormat).
+# See https://learn.microsoft.com/dotnet/fundamentals/code-analysis/quality-rules/ca1062
+[*.cs]
+dotnet_code_quality.CA1062.null_check_validation_methods = NotNull|NotNullOrEmpty|NotNullOrWhiteSpace|AgainstNull|AgainstNullOrEmpty|AgainstNullOrWhiteSpace|RequiresNotNull|For

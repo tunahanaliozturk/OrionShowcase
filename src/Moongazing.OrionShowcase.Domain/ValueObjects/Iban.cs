@@ -2,6 +2,7 @@ namespace Moongazing.OrionShowcase.Domain.ValueObjects;
 
 using System.Globalization;
 using System.Numerics;
+using Moongazing.OrionGuard.Core;
 
 public sealed record Iban
 {
@@ -10,13 +11,20 @@ public sealed record Iban
 
     public Iban(string value)
     {
-        if (string.IsNullOrWhiteSpace(value))
-            throw new ArgumentException("IBAN must not be empty.", nameof(value));
+        // Ensure.NotNullOrWhiteSpace throws standard ArgumentException -- preserves
+        // .NET argument-validation contract for the empty-input case.
+        Ensure.NotNullOrWhiteSpace(value);
+
         var normalized = value.Replace(" ", "", StringComparison.Ordinal).ToUpperInvariant();
-        if (normalized.Length < 15 || normalized.Length > 34)
-            throw new ArgumentException("IBAN length must be between 15 and 34 characters.", nameof(value));
-        if (!ValidateMod97(normalized))
-            throw new ArgumentException("IBAN failed mod-97 checksum.", nameof(value));
+
+        // Length is a structural rule; Ensure.InRange throws ArgumentOutOfRangeException
+        // (which is an ArgumentException), keeping callers' exception-type expectations intact.
+        Ensure.InRange(normalized.Length, 15, 34);
+
+        // Checksum is a true domain invariant -- Contract.Requires expresses precondition
+        // semantics ("this value must satisfy mod-97") and throws ContractException.
+        Contract.Requires(ValidateMod97(normalized), "IBAN failed mod-97 checksum.");
+
         Value = normalized;
     }
 

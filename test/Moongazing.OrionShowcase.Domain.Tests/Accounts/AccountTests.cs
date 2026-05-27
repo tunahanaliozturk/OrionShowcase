@@ -1,6 +1,7 @@
 namespace Moongazing.OrionShowcase.Domain.Tests.Accounts;
 
 using FluentAssertions;
+using Moongazing.OrionGuard.Core;
 using Moongazing.OrionShowcase.Domain.Abstractions;
 using Moongazing.OrionShowcase.Domain.Accounts;
 using Moongazing.OrionShowcase.Domain.ValueObjects;
@@ -44,7 +45,8 @@ public class AccountTests
     {
         var account = Open(100m, Currency.TRY);
         var act = () => account.Deposit(new Money(50m, Currency.USD), new IdempotencyKey("k1"), new FixedClock());
-        act.Should().Throw<InvalidOperationException>();
+        // Cross-currency Money arithmetic now surfaces via Contract.Invariant.
+        act.Should().Throw<ContractException>();
     }
 
     [Fact]
