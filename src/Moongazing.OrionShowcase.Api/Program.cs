@@ -1,9 +1,12 @@
 using Microsoft.AspNetCore.Diagnostics.HealthChecks;
+using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.EntityFrameworkCore;
+using Moongazing.OrionGuard.AspNetCore.Extensions;
 using Moongazing.OrionShowcase.Api.Authentication;
 using Moongazing.OrionShowcase.Api.Endpoints;
 using Moongazing.OrionShowcase.Api.Health;
 using Moongazing.OrionShowcase.Api.Observability;
+using Moongazing.OrionShowcase.Api.RateLimiting;
 using Moongazing.OrionShowcase.Api.Swagger;
 using Moongazing.OrionShowcase.Application.DependencyInjection;
 using Moongazing.OrionShowcase.Infrastructure.DependencyInjection;
@@ -19,8 +22,10 @@ builder.Services
     .AddProblemDetails()
     .AddEndpointsApiExplorer()
     .AddSwagger()
+    .AddOrionGuardAspNetCore()
+    .AddOrionGuardRateLimiting(builder.Configuration)
+    .AddOpenTelemetryForOrion(builder.Configuration)
     .AddOrionShowcaseHealthChecks();
-// OrionGuard middleware + OpenTelemetry added in Task 14
 // Endpoints added in Task 13
 
 var app = builder.Build();
@@ -41,8 +46,10 @@ if (app.Environment.IsDevelopment())
     app.UseSwaggerUI();
 }
 
+app.UseOrionGuardValidation();
 app.UseAuthentication();
 app.UseAuthorization();
+app.UseRateLimiter();
 app.MapBankingEndpoints();
 app.MapHealthChecks("/health/live");
 app.MapHealthChecks("/health/ready", new HealthCheckOptions { Predicate = h => h.Tags.Contains("ready") });

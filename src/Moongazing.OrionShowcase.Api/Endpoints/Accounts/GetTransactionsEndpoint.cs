@@ -4,8 +4,10 @@ using FluentValidation;
 using MediatR;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
+using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.AspNetCore.Routing;
 using Moongazing.OrionShowcase.Api.Filters;
+using Moongazing.OrionShowcase.Api.RateLimiting;
 using Moongazing.OrionShowcase.Application.Accounts.Queries.GetAccountTransactions;
 using Moongazing.OrionShowcase.Domain.ValueObjects;
 
@@ -16,6 +18,7 @@ internal static class GetTransactionsEndpoint
         ArgumentNullException.ThrowIfNull(app);
         return app.MapGet("/api/accounts/{id:guid}/transactions", Handle)
            .RequireAuthorization()
+           .RequireRateLimiting(OrionGuardRateLimitingExtensions.PolicyQuery)
            .WithName("GetAccountTransactions")
            .WithTags("Accounts")
            .Produces<IReadOnlyList<TransactionDto>>(200)

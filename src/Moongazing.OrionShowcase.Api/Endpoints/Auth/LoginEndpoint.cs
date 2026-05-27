@@ -2,8 +2,10 @@ namespace Moongazing.OrionShowcase.Api.Endpoints.Auth;
 
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
+using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.AspNetCore.Routing;
 using Moongazing.OrionShowcase.Api.Authentication;
+using Moongazing.OrionShowcase.Api.RateLimiting;
 
 internal static class LoginEndpoint
 {
@@ -14,6 +16,7 @@ internal static class LoginEndpoint
         ArgumentNullException.ThrowIfNull(app);
         return app.MapPost("/api/auth/login", Handle)
            .AllowAnonymous()
+           .RequireRateLimiting(OrionGuardRateLimitingExtensions.PolicyLogin)
            .WithName("Login")
            .WithTags("Auth");
     }

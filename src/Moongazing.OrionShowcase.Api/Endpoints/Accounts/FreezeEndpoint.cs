@@ -4,8 +4,10 @@ using FluentValidation;
 using MediatR;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
+using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.AspNetCore.Routing;
 using Moongazing.OrionShowcase.Api.Filters;
+using Moongazing.OrionShowcase.Api.RateLimiting;
 using Moongazing.OrionShowcase.Application.Accounts.Commands.FreezeAccount;
 using Moongazing.OrionShowcase.Domain.ValueObjects;
 
@@ -16,6 +18,7 @@ internal static class FreezeEndpoint
         ArgumentNullException.ThrowIfNull(app);
         return app.MapPost("/api/accounts/{id:guid}/freeze", Handle)
            .RequireAuthorization()
+           .RequireRateLimiting(OrionGuardRateLimitingExtensions.PolicyQuery)
            .WithName("FreezeAccount")
            .WithTags("Accounts")
            .Produces(204)
