@@ -369,6 +369,10 @@ Activity sources exported: `Moongazing.OrionGuard`, `OrionAudit`, `Moongazing.Or
 - No Kubernetes manifests. Docker compose ships; Helm chart is roadmap.
 - OrionKey 0.4.1 exposes a process-global static facade for Snowflake configuration. Multi-tenant or per-host worker-id rotation is roadmap material in OrionKey itself.
 
+## Benchmarks
+
+See [benchmarks.md](benchmarks.md). OrionShowcase is an application, not a library, so per-package microbenchmarks live in each Orion repo (linked from there). End-to-end transfer-flow throughput benchmarks against the docker stack are planned for v0.2.
+
 ## Roadmap
 
 See [ROADMAP.md](ROADMAP.md). Highlights:
