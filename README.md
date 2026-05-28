@@ -62,32 +62,28 @@ Then in Jaeger, open the trace for that one transfer request. You will see spans
 
 ## Architecture
 
-Four-layer Clean Architecture with one-way dependency flow:
+Four-layer Clean Architecture with one-way dependency flow.
 
-```
-┌─────────────────────────────────────────────────────────────┐
-│  Api          Minimal API endpoints, JWT, Swagger,          │
-│               OrionGuard.AspNetCore validation middleware   │
-├─────────────────────────────────────────────────────────────┤
-│  Application  MediatR commands/queries/handlers,            │
-│               OrionGuard FluentStyleValidator pipeline,     │
-│               Logging, Idempotency, Audit behaviors         │
-├─────────────────────────────────────────────────────────────┤
-│  Infrastructure  EF Core + Postgres, OrionVault wiring,     │
-│                  OrionPatch outbox, OrionLock backend,      │
-│                  OrionAudit entity-diff capture,            │
-│                  OrionKey-backed idempotency store,         │
-│                  hosted services (OutboxDispatcher,         │
-│                  DailySettlement)                           │
-├─────────────────────────────────────────────────────────────┤
-│  Domain       Aggregates, value objects, domain events.     │
-│               OrionGuard Ensure/FastGuard/FluentGuard/      │
-│               Contract throughout. No framework refs.       │
-└─────────────────────────────────────────────────────────────┘
+```mermaid
+flowchart TB
+    Api["<b>Api</b><br/>Minimal API endpoints · JWT · Swagger<br/>OrionGuard.AspNetCore validation middleware"]
+    App["<b>Application</b><br/>MediatR commands/queries/handlers<br/>OrionGuard FluentStyleValidator pipeline<br/>Logging · Idempotency · Audit behaviors"]
+    Infra["<b>Infrastructure</b><br/>EF Core + Postgres · OrionVault wiring<br/>OrionPatch outbox · OrionLock backend<br/>OrionAudit entity-diff capture<br/>OrionKey-backed idempotency store<br/>Hosted services (OutboxDispatcher, DailySettlement)"]
+    Domain["<b>Domain</b><br/>Aggregates · value objects · domain events<br/>OrionGuard Ensure/FastGuard/FluentGuard/Contract<br/>No framework references"]
 
-  Dependency direction:  Api -> Application -> Infrastructure -> Domain
-                                                       ↑___________|
-                          (Infrastructure knows Domain; Domain does not know Infrastructure)
+    Api --> App
+    App --> Infra
+    Infra --> Domain
+    Infra -.knows.-> Domain
+
+    classDef api fill:#dbeafe,stroke:#1e40af,color:#1e3a8a
+    classDef app fill:#e0e7ff,stroke:#3730a3,color:#312e81
+    classDef infra fill:#fce7f3,stroke:#9d174d,color:#831843
+    classDef domain fill:#f5f3ff,stroke:#5b21b6,color:#4c1d95
+    class Api api
+    class App app
+    class Infra infra
+    class Domain domain
 ```
 
 Tests:
@@ -95,6 +91,55 @@ Tests:
 - `OrionShowcase.Domain.Tests` (30 tests, xunit + FluentAssertions, no infrastructure)
 - `OrionShowcase.Application.Tests` (21 tests, in-memory fakes for repositories/locks/idempotency)
 - `OrionShowcase.IntegrationTests` (Testcontainers Postgres, real DI graph, end-to-end register/open/transfer + PII-at-rest verification)
+
+## Transfer flow (one request, six packages)
+
+```mermaid
+sequenceDiagram
+    autonumber
+    actor U as User
+    participant API as Api endpoint
+    participant OG as OrionGuard<br/>validation
+    participant MED as MediatR pipeline
+    participant OK as OrionKey<br/>idempotency
+    participant OA as OrionAudit<br/>+ EfAuditWriter
+    participant H as TransferMoneyHandler
+    participant OL as OrionLock<br/>(Postgres advisory)
+    participant DB as Postgres<br/>(banking)
+    participant OV as OrionVault<br/>value converter
+    participant OP as OrionPatch<br/>outbox interceptor
+
+    U->>+API: POST /api/accounts/{from}/transfer
+    API->>OG: validate request DTO
+    OG-->>API: ok
+    API->>+MED: Send(TransferMoneyCommand)
+    MED->>OK: TryClaim(idempotencyKey)
+    OK-->>MED: claimed
+    MED->>OA: begin audit
+    MED->>+H: Handle(cmd)
+    H->>OL: AcquireAsync(account:lower)
+    H->>OL: AcquireAsync(account:higher)
+    OL-->>H: 2 leases held
+    H->>+DB: SELECT accounts (Customer join)
+    DB->>OV: decrypt national_id / email / phone
+    OV-->>DB: plaintext
+    DB-->>-H: account aggregates
+    H->>H: Withdraw + Deposit + RecordTransfer<br/>(raises TransferCompleted event)
+    H->>+DB: SaveChanges
+    DB->>OP: SavingChanges interceptor flushes domain events
+    OP->>DB: INSERT outbox_messages (TransferCompleted)
+    DB->>OA: SavingChanges interceptor captures entity diff
+    OA->>DB: INSERT OrionAudit_Log (JSON Patch)
+    DB-->>-H: committed
+    H->>OL: dispose 2 leases
+    H-->>-MED: Result.Ok(transferId, newBalance)
+    MED->>OA: end audit (success + response JSON)
+    MED->>OK: StoreResponse(idempotencyKey, json)
+    MED-->>-API: response
+    API-->>-U: 200 OK
+```
+
+Every numbered step lands as a span in Jaeger and a structured log line in Seq with the same trace id.
 
 ## What each Orion package does in this codebase
 
@@ -142,6 +187,22 @@ Two locking patterns demonstrate OrionLock:
 
 [`DailySettlementService.cs`](src/Moongazing.OrionShowcase.Infrastructure/HostedServices/DailySettlementService.cs) is a `BackgroundService` that wakes at 23:55 UTC. Before doing any work it calls `TryAcquireAsync("settlement:daily")`. If the lock is already held (because another replica got there first), the service logs `Settlement skipped` and goes back to sleep. This is the standard pattern for daily jobs that must run exactly once across N horizontally-scaled API replicas.
 
+```mermaid
+flowchart TD
+    Start([Replica wakes at 23:55 UTC]) --> Try{TryAcquireAsync<br/>'settlement:daily'}
+    Try -- "lease == null<br/>(another replica holds it)" --> Skip[Log 'Settlement skipped']
+    Skip --> Sleep[Sleep until next run]
+    Try -- "lease acquired" --> Run[RunDailySettlement.ExecuteAsync<br/>close interest, EOD reports, ...]
+    Run --> Release[Dispose lease<br/>Postgres auto-releases on session end]
+    Release --> Sleep
+    Sleep --> Start
+
+    classDef skip fill:#fee2e2,stroke:#991b1b,color:#7f1d1d
+    classDef run fill:#dcfce7,stroke:#166534,color:#14532d
+    class Skip,Sleep skip
+    class Run,Release run
+```
+
 Backend: `OrionLock.Postgres` 0.2.3 uses Postgres `pg_try_advisory_lock` with session-scoped semantics — if the holding process crashes, Postgres auto-releases the lock when the session ends.
 
 ### OrionKey — Snowflake IDs and idempotency
@@ -185,31 +246,100 @@ Honesty section. Not every component in the stack has an Orion equivalent, and t
 
 If a future Orion package ships any of the above (a saga library, an OIDC integration, a tracing exporter), the showcase swaps to it.
 
+## Where each Orion package wires in (component map)
+
+```mermaid
+flowchart LR
+    subgraph Api["Api layer"]
+        Prog[Program.cs]
+        Endp[Endpoints]
+        Jwt[JwtBearer]
+    end
+
+    subgraph App["Application layer"]
+        Cmd[Commands +<br/>Handlers]
+        Pipe[MediatR<br/>pipeline]
+        Val[FluentStyleValidators]
+    end
+
+    subgraph Infra["Infrastructure layer"]
+        Ctx[BankingDbContext]
+        Repo[Repositories]
+        Adp[DomainEventOutboxAdapter]
+        Hsv[DailySettlementService]
+        Aud[EfAuditWriter]
+        Ids[OrionKeyIdempotencyStore]
+    end
+
+    subgraph Dom["Domain layer"]
+        Agg[Account +<br/>Customer aggregates]
+        Vo[Value objects]
+    end
+
+    OG[OrionGuard<br/>+ AspNetCore]:::orion
+    OA[OrionAudit]:::orion
+    OL[OrionLock.Postgres]:::orion
+    OK[OrionKey]:::orion
+    OP[OrionPatch.EFCore]:::orion
+    OV[OrionVault.EFCore]:::orion
+
+    Prog -.UseOrionGuardValidation.-> OG
+    Val -.FluentStyleValidator.-> OG
+    Pipe -.ValidationBehavior.-> OG
+    Agg -.Ensure/Contract/FluentGuard.-> OG
+
+    Ctx -.UseOrionAudit / Audit entity diff.-> OA
+    Aud -.command-level audit rows.-> OA
+
+    Cmd -.IDistributedLock.AcquireAsync.-> OL
+    Hsv -.TryAcquireAsync settlement:daily.-> OL
+
+    Aud -.NextSnowflake.-> OK
+    Ids -.snowflake IDs +<br/>EF-backed cache.-> OK
+
+    Adp -.IOutbox.Enqueue domain events.-> OP
+    Ctx -.UseOrionPatch interceptor.-> OP
+
+    Ctx -.UseOrionVault interceptor.-> OV
+    Repo -.ciphertext on disk,<br/>plaintext to handlers.-> OV
+
+    classDef orion fill:#e0e7ff,stroke:#312e81,color:#1e1b4b,stroke-width:2px
+```
+
+Every arrow is a real line of code in this repo. Click through to the file links in the previous section to see them.
+
 ## OpenTelemetry trace anatomy
 
-A single `POST /api/accounts/{fromId}/transfer` request produces this span tree (visible in Jaeger):
+A single `POST /api/accounts/{fromId}/transfer` request produces this span tree (visible in Jaeger).
 
-```
-HTTP POST /api/accounts/{fromId}/transfer
-└─ orionguard.endpoint_filter.validate
-└─ Authentication.JwtBearer
-└─ MediatR.Send(TransferMoneyCommand)
-   ├─ ValidationBehavior            (OrionGuard FluentStyleValidator)
-   ├─ LoggingBehavior
-   ├─ IdempotencyBehavior            (OrionKey-backed store)
-   │  └─ DB SELECT idempotency_records
-   ├─ AuditBehavior (begin)
-   ├─ TransferMoneyHandler
-   │  ├─ orionlock.acquire account:00000000-...0001
-   │  ├─ orionlock.acquire account:00000000-...0002
-   │  ├─ DB SELECT accounts (decrypt via OrionVault on join)
-   │  ├─ DB INSERT transactions x2
-   │  ├─ DB UPDATE accounts SET balance_amount = ... x2
-   │  ├─ DB INSERT outbox_messages    (OrionPatch SaveChangesInterceptor)
-   │  ├─ DB INSERT command_audit_entries
-   │  ├─ DB INSERT OrionAudit_Log     (entity-diff capture)
-   │  └─ orionlock.release x2
-   └─ AuditBehavior (end)
+```mermaid
+flowchart TB
+    Http["HTTP POST /api/accounts/{fromId}/transfer"]
+    Filter[orionguard.endpoint_filter.validate]
+    JwtSpan[Authentication.JwtBearer]
+    Med[MediatR.Send TransferMoneyCommand]
+    Val[ValidationBehavior]
+    Log[LoggingBehavior]
+    Ide[IdempotencyBehavior]
+    IdeDb[DB SELECT idempotency_records]
+    AudBeg[AuditBehavior begin]
+    Hand[TransferMoneyHandler]
+    LkA[orionlock.acquire account:0001]
+    LkB[orionlock.acquire account:0002]
+    SelAcc[DB SELECT accounts<br/>+ OrionVault decrypt]
+    InsTx[DB INSERT transactions x2]
+    UpdAcc[DB UPDATE accounts SET balance x2]
+    Outbox[DB INSERT outbox_messages<br/>OrionPatch SaveChangesInterceptor]
+    Aud[DB INSERT command_audit_entries]
+    OAudit[DB INSERT OrionAudit_Log<br/>RFC 6902 JSON Patch]
+    RelA[orionlock.release x2]
+    AudEnd[AuditBehavior end]
+
+    Http --> Filter --> JwtSpan --> Med
+    Med --> Val --> Log --> Ide --> IdeDb
+    Ide --> AudBeg --> Hand
+    Hand --> LkA --> LkB --> SelAcc --> InsTx --> UpdAcc --> Outbox --> Aud --> OAudit --> RelA
+    RelA --> AudEnd
 ```
 
 Activity sources exported: `Moongazing.OrionGuard`, `OrionAudit`, `Moongazing.OrionLock`, `Moongazing.OrionPatch`, `Moongazing.OrionVault`. OrionKey 0.4.1 currently exposes only a Meter, no ActivitySource — `orionkey.snowflake.generated` counter is visible in Jaeger's metrics view.

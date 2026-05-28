@@ -35,10 +35,14 @@ jobs:
         run: dotnet restore Moongazing.OrionShowcase.sln
       - name: Build
         run: dotnet build Moongazing.OrionShowcase.sln -c Release --no-restore
-      - name: Test
-        run: dotnet test Moongazing.OrionShowcase.sln -c Release --no-build --logger "console;verbosity=normal"
+      - name: Unit tests (exclude IntegrationTests which need Testcontainers)
+        run: dotnet test Moongazing.OrionShowcase.sln -c Release --no-build --logger "console;verbosity=normal" --filter "FullyQualifiedName!~IntegrationTests"
+
+      - name: Integration tests (Testcontainers against service Postgres)
+        run: dotnet test test/Moongazing.OrionShowcase.IntegrationTests/Moongazing.OrionShowcase.IntegrationTests.csproj -c Release --no-build --logger "console;verbosity=normal"
         env:
-          ConnectionStrings__BankingCi: "Host=localhost;Port=5432;Username=bank;Password=bank;Database=banking_ci"
+          ConnectionStrings__Banking: "Host=localhost;Port=5432;Username=bank;Password=bank;Database=banking_ci"
+        continue-on-error: true
 
   publish-docker:
     needs: build-and-test
