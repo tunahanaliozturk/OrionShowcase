@@ -1,6 +1,4 @@
-<p align="center">
-  <img src="docs/logo.png" alt="Moongazing.OrionShowcase" width="180" />
-</p>
+
 
 <h1 align="center">Moongazing.OrionShowcase</h1>
 
