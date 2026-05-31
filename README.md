@@ -399,4 +399,4 @@ MIT. See [LICENSE](LICENSE).
 
 ## Contributing
 
-Issues and pull requests welcome. There is no `CONTRIBUTING.md` yet; for now, please open an issue first if your change touches more than one file or the public API surface, so we can align on the approach.
+Issues and pull requests welcome. Please read [CONTRIBUTING.md](CONTRIBUTING.md) and the [Code of Conduct](CODE_OF_CONDUCT.md) before opening one.
