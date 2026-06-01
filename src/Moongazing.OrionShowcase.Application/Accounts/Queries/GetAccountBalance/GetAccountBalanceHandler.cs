@@ -10,10 +10,10 @@ public sealed class GetAccountBalanceHandler : IRequestHandler<GetAccountBalance
 
     public GetAccountBalanceHandler(IAccountRepository accounts) => _accounts = accounts;
 
-    public async Task<Result<AccountBalanceDto>> Handle(GetAccountBalanceQuery req, CancellationToken cancellationToken)
+    public async Task<Result<AccountBalanceDto>> Handle(GetAccountBalanceQuery request, CancellationToken cancellationToken)
     {
-        ArgumentNullException.ThrowIfNull(req);
-        var account = await _accounts.GetAsync(req.AccountId, cancellationToken).ConfigureAwait(false);
+        ArgumentNullException.ThrowIfNull(request);
+        var account = await _accounts.GetAsync(request.AccountId, cancellationToken).ConfigureAwait(false);
         if (account is null) return Result<AccountBalanceDto>.Fail("Account not found.");
         return Result<AccountBalanceDto>.Ok(new AccountBalanceDto(
             account.Id.Value, account.Balance.Amount, account.Balance.Currency.ToString(), account.Status.ToString()));

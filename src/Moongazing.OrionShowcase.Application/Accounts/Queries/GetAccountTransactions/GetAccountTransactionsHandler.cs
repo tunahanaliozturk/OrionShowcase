@@ -10,16 +10,16 @@ public sealed class GetAccountTransactionsHandler : IRequestHandler<GetAccountTr
 
     public GetAccountTransactionsHandler(IAccountRepository accounts) => _accounts = accounts;
 
-    public async Task<Result<IReadOnlyList<TransactionDto>>> Handle(GetAccountTransactionsQuery req, CancellationToken cancellationToken)
+    public async Task<Result<IReadOnlyList<TransactionDto>>> Handle(GetAccountTransactionsQuery request, CancellationToken cancellationToken)
     {
-        ArgumentNullException.ThrowIfNull(req);
-        var account = await _accounts.GetAsync(req.AccountId, cancellationToken).ConfigureAwait(false);
+        ArgumentNullException.ThrowIfNull(request);
+        var account = await _accounts.GetAsync(request.AccountId, cancellationToken).ConfigureAwait(false);
         if (account is null) return Result<IReadOnlyList<TransactionDto>>.Fail("Account not found.");
 
         var dtos = account.Transactions
             .OrderByDescending(t => t.At)
-            .Skip((req.Page - 1) * req.PageSize)
-            .Take(req.PageSize)
+            .Skip((request.Page - 1) * request.PageSize)
+            .Take(request.PageSize)
             .Select(t => new TransactionDto(
                 t.Id.Value, t.Kind.ToString(), t.Amount.Amount, t.Amount.Currency.ToString(),
                 t.BalanceAfter.Amount, t.At))
