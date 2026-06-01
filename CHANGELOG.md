@@ -2,6 +2,20 @@
 
 All notable changes to OrionShowcase are recorded here. Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [0.1.1] - 2026-06-01
+
+### Fixed
+
+- CI workflow now runs unit tests and Testcontainers integration tests in separate steps so the unit-test gate stops hanging on the Testcontainers-vs-CI-service-Postgres race that cancelled the v0.1.0 release workflow. With the workflow green, the release event triggers GHCR Docker image publish for `ghcr.io/tunahanaliozturk/orionshowcase-api:v0.1.1` and `:latest`.
+
+### Added
+
+- 5 Mermaid diagrams in README: architecture, transfer sequence, family component map, daily settlement gating flowchart, OpenTelemetry trace tree.
+- `benchmarks.md` linking to per-package benchmark documents.
+- `CONTRIBUTING.md` and `CODE_OF_CONDUCT.md`.
+
+No code changes since v0.1.0. All public API and runtime behaviour are identical.
+
 ## [0.1.0] - 2026-05-28
 
 ### Added
