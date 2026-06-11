@@ -78,4 +78,6 @@ No code changes since v0.1.0. All public API and runtime behaviour are identical
 - Logo is a placeholder borrowed from OrionVault. Dedicated briefcase glyph is planned for v0.1.1.
 - OrionGuard.AspNetCore 6.4.2 is validation + ProblemDetails; rate limits are ASP.NET Core's in-box RateLimiter middleware. If a future OrionGuard.AspNetCore release ships rate limiting, the showcase will swap to it.
 
+[0.1.2]: https://github.com/tunahanaliozturk/OrionShowcase/releases/tag/v0.1.2
+[0.1.1]: https://github.com/tunahanaliozturk/OrionShowcase/releases/tag/v0.1.1
 [0.1.0]: https://github.com/tunahanaliozturk/OrionShowcase/releases/tag/v0.1.0

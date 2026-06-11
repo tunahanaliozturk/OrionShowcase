@@ -3,7 +3,7 @@
     <ManagePackageVersionsCentrally>true</ManagePackageVersionsCentrally>
   </PropertyGroup>
   <ItemGroup>
-    <!-- Orion family - chain 22 (v0.X.21) latest stable across all six packages -->
+    <!-- Orion family - chain 22 latest stable (Guard 6.5.21 + Patch 0.2.22 + others 0.X.21) -->
     <PackageVersion Include="OrionGuard" Version="6.5.21" />
     <PackageVersion Include="OrionGuard.AspNetCore" Version="6.5.21" />
     <PackageVersion Include="OrionAudit" Version="0.7.21" />
