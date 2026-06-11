@@ -3,17 +3,17 @@
     <ManagePackageVersionsCentrally>true</ManagePackageVersionsCentrally>
   </PropertyGroup>
   <ItemGroup>
-    <!-- Orion family (corrected, all live on NuGet as of today) -->
-    <PackageVersion Include="OrionGuard" Version="6.4.2" />
-    <PackageVersion Include="OrionGuard.AspNetCore" Version="6.4.2" />
-    <PackageVersion Include="OrionAudit" Version="0.6.2" />
-    <PackageVersion Include="OrionLock" Version="0.2.3" />
-    <PackageVersion Include="OrionLock.Postgres" Version="0.2.3" />
-    <PackageVersion Include="OrionKey" Version="0.4.1" />
-    <PackageVersion Include="OrionPatch" Version="0.1.1" />
-    <PackageVersion Include="OrionPatch.EntityFrameworkCore" Version="0.1.1" />
-    <PackageVersion Include="OrionVault" Version="0.1.2" />
-    <PackageVersion Include="OrionVault.EntityFrameworkCore" Version="0.1.2" />
+    <!-- Orion family - chain 22 (v0.X.21) latest stable across all six packages -->
+    <PackageVersion Include="OrionGuard" Version="6.5.21" />
+    <PackageVersion Include="OrionGuard.AspNetCore" Version="6.5.21" />
+    <PackageVersion Include="OrionAudit" Version="0.7.21" />
+    <PackageVersion Include="OrionLock" Version="0.3.21" />
+    <PackageVersion Include="OrionLock.Postgres" Version="0.3.21" />
+    <PackageVersion Include="OrionKey" Version="0.5.21" />
+    <PackageVersion Include="OrionPatch" Version="0.2.22" />
+    <PackageVersion Include="OrionPatch.EntityFrameworkCore" Version="0.2.22" />
+    <PackageVersion Include="OrionVault" Version="0.2.21" />
+    <PackageVersion Include="OrionVault.EntityFrameworkCore" Version="0.2.21" />
     <!-- Framework + libs -->
     <PackageVersion Include="MediatR" Version="12.4.1" />
     <PackageVersion Include="Microsoft.EntityFrameworkCore" Version="9.0.1" />
