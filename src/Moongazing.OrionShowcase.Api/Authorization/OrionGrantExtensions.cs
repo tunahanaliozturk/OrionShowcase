@@ -29,17 +29,19 @@ public static class OrionGrantExtensions
                 BankingPermissions.CustomersRead,
                 BankingPermissions.CustomersWrite,
                 BankingPermissions.AccountsOpen,
+                BankingPermissions.AccountsRead,
                 BankingPermissions.AccountsTransfer);
 
-            // A back-office teller can manage customers but not move customer money.
+            // A back-office teller can manage customers and view account activity but not move money.
             grant.AddRole(
                 "teller",
                 BankingPermissions.CustomersRead,
                 BankingPermissions.CustomersWrite,
-                BankingPermissions.AccountsOpen);
+                BankingPermissions.AccountsOpen,
+                BankingPermissions.AccountsRead);
 
             // A read-only partner/service identity (also used by API-key callers).
-            grant.AddRole("partner", BankingPermissions.CustomersRead);
+            grant.AddRole("partner", BankingPermissions.CustomersRead, BankingPermissions.AccountsRead);
         });
 
         return services;

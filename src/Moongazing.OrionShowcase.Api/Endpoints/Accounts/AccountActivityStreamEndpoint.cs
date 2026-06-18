@@ -5,6 +5,7 @@ using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Routing;
 using Moongazing.OrionStream.AspNetCore;
 using Moongazing.OrionStream.Streaming;
+using Moongazing.OrionShowcase.Api.Authorization;
 using Moongazing.OrionShowcase.Api.Streaming;
 
 internal static class AccountActivityStreamEndpoint
@@ -16,8 +17,14 @@ internal static class AccountActivityStreamEndpoint
     public static IEndpointConventionBuilder MapAccountActivityStream(this IEndpointRouteBuilder app)
     {
         ArgumentNullException.ThrowIfNull(app);
+        // Authenticated and gated behind the accounts:read permission via OrionGrant, matching the
+        // rest of the account surface. Note: this sample uses a single operator identity (the demo
+        // login is not bound to a specific customer), so it does not enforce per-account ownership.
+        // A real multi-tenant deployment would additionally verify that the caller owns this account
+        // (compare the account's customer id to the caller identity) and return 403 otherwise.
         return app.MapGet("/api/accounts/{id:guid}/activity/stream", Handle)
             .RequireAuthorization()
+            .RequirePermission(BankingPermissions.AccountsRead)
             .WithName("StreamAccountActivity")
             .WithTags("Accounts")
             .Produces(200, contentType: "text/event-stream");

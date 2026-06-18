@@ -16,6 +16,9 @@ public static class BankingPermissions
     /// <summary>Open a new account.</summary>
     public const string AccountsOpen = "accounts:open";
 
+    /// <summary>Read account state and activity (for example the SSE activity stream).</summary>
+    public const string AccountsRead = "accounts:read";
+
     /// <summary>Move money between accounts.</summary>
     public const string AccountsTransfer = "accounts:transfer";
 }
