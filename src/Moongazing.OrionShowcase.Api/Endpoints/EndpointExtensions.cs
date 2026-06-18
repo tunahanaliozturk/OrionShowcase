@@ -3,6 +3,7 @@ namespace Moongazing.OrionShowcase.Api.Endpoints;
 using Moongazing.OrionShowcase.Api.Endpoints.Accounts;
 using Moongazing.OrionShowcase.Api.Endpoints.Auth;
 using Moongazing.OrionShowcase.Api.Endpoints.Customers;
+using Moongazing.OrionShowcase.Api.Endpoints.Partner;
 
 public static class EndpointExtensions
 {
@@ -19,6 +20,7 @@ public static class EndpointExtensions
         app.MapClose();
         app.MapGetBalance();
         app.MapGetTransactions();
+        app.MapPartnerBalance();
         return app;
     }
 }

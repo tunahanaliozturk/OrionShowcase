@@ -5,6 +5,7 @@ using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.AspNetCore.Routing;
+using Moongazing.OrionShowcase.Api.Authorization;
 using Moongazing.OrionShowcase.Api.Filters;
 using Moongazing.OrionShowcase.Api.RateLimiting;
 using Moongazing.OrionShowcase.Application.Accounts.Commands.TransferMoney;
@@ -18,11 +19,13 @@ internal static class TransferEndpoint
         // CA1716: 'from' is a reserved word in VB.NET; route parameter name kept as `fromAccountId` to avoid the analyzer warning.
         return app.MapPost("/api/accounts/{fromAccountId:guid}/transfer", Handle)
            .RequireAuthorization()
+           .RequirePermission(BankingPermissions.AccountsTransfer)
            .RequireRateLimiting(OrionGuardRateLimitingExtensions.PolicyTransfer)
            .WithName("TransferMoney")
            .WithTags("Accounts")
            .Produces<TransferResponse>(200)
            .ProducesValidationProblem()
+           .ProducesProblem(403)
            .ProducesProblem(409);
     }
 

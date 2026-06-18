@@ -2,11 +2,16 @@ using Microsoft.AspNetCore.Diagnostics.HealthChecks;
 using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.EntityFrameworkCore;
 using Moongazing.OrionGuard.AspNetCore.Extensions;
+using Moongazing.OrionLens;
+using Moongazing.OrionOnce;
+using Moongazing.OrionShowcase.Api.ApiKeys;
 using Moongazing.OrionShowcase.Api.Authentication;
+using Moongazing.OrionShowcase.Api.Authorization;
 using Moongazing.OrionShowcase.Api.Endpoints;
 using Moongazing.OrionShowcase.Api.Health;
 using Moongazing.OrionShowcase.Api.Observability;
 using Moongazing.OrionShowcase.Api.RateLimiting;
+using Moongazing.OrionShowcase.Api.Redaction;
 using Moongazing.OrionShowcase.Api.Swagger;
 using Moongazing.OrionShowcase.Application.DependencyInjection;
 using Moongazing.OrionShowcase.Infrastructure.DependencyInjection;
@@ -25,8 +30,19 @@ builder.Services
     .AddOrionGuardAspNetCore()
     .AddOrionGuardRateLimiting(builder.Configuration)
     .AddOpenTelemetryForOrion(builder.Configuration)
-    .AddOrionShowcaseHealthChecks();
-// Endpoints added in Task 13
+    .AddOrionShowcaseHealthChecks()
+    // OrionLens: ambient correlation context + outbound propagation handler.
+    .AddOrionLens()
+    // OrionShade: PII/secret redaction (IRedactor) used at customer-data log sites.
+    .AddBankingRedaction()
+    // OrionGrant: banking permission set mapped from JWT roles.
+    .AddBankingAuthorization()
+    // OrionLedger: API-key issuance/verification for partner endpoints (in-memory store).
+    .AddBankingApiKeys()
+    // OrionOnce: HTTP idempotency for mutating requests honoring the Idempotency-Key header. The
+    // default guarded set already covers POST (idempotent GET/HEAD/OPTIONS are excluded); a key is
+    // optional, so requests without an Idempotency-Key pass through unchanged.
+    .AddOrionOnce();
 
 var app = builder.Build();
 
@@ -44,12 +60,31 @@ if (app.Environment.IsDevelopment())
 {
     app.UseSwagger();
     app.UseSwaggerUI();
+    // Surface the seeded OrionLedger demo API key so partner endpoints can be exercised locally.
+    app.Logger.LogInformation(
+        "OrionLedger demo API key (dev only): send header X-Api-Key: {DemoApiKey}",
+        Moongazing.OrionShowcase.Api.ApiKeys.OrionLedgerExtensions.DemoApiKey);
 }
+
+// OrionLens FIRST: establish the ambient correlation context (mint/echo X-Correlation-ID,
+// read baggage) before anything logs, authenticates, or calls downstream services.
+app.UseOrionLens();
+
+// OrionLedger API-key authentication path for partner/service callers. Runs before JWT auth so
+// an X-Api-Key principal is established for endpoints that opt into it; JWT-protected endpoints
+// are unaffected when no key is present.
+app.UseBankingApiKeyAuth();
 
 app.UseOrionGuardValidation();
 app.UseAuthentication();
 app.UseAuthorization();
 app.UseRateLimiter();
+
+// OrionOnce idempotency: guards mutating POSTs that carry an Idempotency-Key. Placed after auth
+// so only authenticated, rate-limited requests reach the store, and before the endpoints whose
+// retries we deduplicate (notably the transfer endpoint).
+app.UseOrionOnce();
+
 app.MapBankingEndpoints();
 app.MapHealthChecks("/health/live");
 app.MapHealthChecks("/health/ready", new HealthCheckOptions { Predicate = h => h.Tags.Contains("ready") });

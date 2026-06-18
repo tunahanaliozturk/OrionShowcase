@@ -6,7 +6,8 @@
     <!-- CA1515: Program is intentionally public so IntegrationTests can use WebApplicationFactory<Program>. -->
     <!-- CA1305: Serilog sink configuration extensions don't accept IFormatProvider; format provider is plumbed via the logger pipeline. -->
     <!-- CA1812: Minimal API request/response records are instantiated by the ASP.NET Core model binder/JSON serializer, not directly by code; the analyzer cannot see this. -->
-    <NoWarn>$(NoWarn);CA1515;CA1305;CA1812</NoWarn>
+    <!-- CA1848/CA1873: the demo log statements (startup API-key surfacing, customer-register PII demo) use ILogger.LogInformation directly; LoggerMessage source-gen delegates are overkill for a sample app. -->
+    <NoWarn>$(NoWarn);CA1515;CA1305;CA1812;CA1848;CA1873</NoWarn>
   </PropertyGroup>
   <ItemGroup>
     <PackageReference Include="Microsoft.AspNetCore.Authentication.JwtBearer" />
@@ -22,6 +23,11 @@
     <PackageReference Include="OpenTelemetry.Instrumentation.EntityFrameworkCore" />
     <PackageReference Include="Npgsql.OpenTelemetry" />
     <PackageReference Include="OrionGuard.AspNetCore" />
+    <PackageReference Include="OrionLens" />
+    <PackageReference Include="OrionShade" />
+    <PackageReference Include="OrionGrant" />
+    <PackageReference Include="OrionLedger" />
+    <PackageReference Include="OrionOnce" />
     <ProjectReference Include="..\Moongazing.OrionShowcase.Infrastructure\Moongazing.OrionShowcase.Infrastructure.csproj" />
   </ItemGroup>
 </Project>
