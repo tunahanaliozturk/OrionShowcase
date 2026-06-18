@@ -5,6 +5,8 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Moongazing.OrionAudit;
+using Moongazing.OrionBeacon;
+using Moongazing.OrionBeacon.Observers;
 using Moongazing.OrionLock.DependencyInjection;
 using Moongazing.OrionLock.Postgres;
 using Moongazing.OrionPatch.DependencyInjection;
@@ -18,6 +20,7 @@ using Moongazing.OrionShowcase.Domain.Repositories;
 using Moongazing.OrionShowcase.Infrastructure.Audit;
 using Moongazing.OrionShowcase.Infrastructure.HostedServices;
 using Moongazing.OrionShowcase.Infrastructure.Idempotency;
+using Moongazing.OrionShowcase.Infrastructure.Limits;
 using Moongazing.OrionShowcase.Infrastructure.Outbox;
 using Moongazing.OrionShowcase.Infrastructure.Persistence;
 using Moongazing.OrionShowcase.Infrastructure.Persistence.Repositories;
@@ -77,7 +80,11 @@ public static class InfrastructureServiceCollectionExtensions
         services.AddScoped<IAccountRepository, AccountRepository>();
         services.AddScoped<ICustomerRepository, CustomerRepository>();
         services.AddScoped<IUnitOfWork, EfUnitOfWork>();
-        services.AddSingleton<IClock, SystemClock>();
+        // SystemClock satisfies both the domain IClock and Orion.Abstractions' IOrionClock so the
+        // app and the Orion packages read wall-clock time from a single source.
+        services.AddSingleton<SystemClock>();
+        services.AddSingleton<IClock>(sp => sp.GetRequiredService<SystemClock>());
+        services.AddSingleton<Moongazing.Orion.Abstractions.Time.IOrionClock>(sp => sp.GetRequiredService<SystemClock>());
 
         // OrionLock with Postgres pg_try_advisory_lock backend. Registered as singleton by
         // the package so TransferMoneyHandler's IDistributedLock dependency resolves
@@ -100,7 +107,28 @@ public static class InfrastructureServiceCollectionExtensions
         services.AddScoped<IAuditWriter, EfAuditWriter>();
         services.AddScoped<IIdempotencyStore, OrionKeyIdempotencyStore>();
 
-        // DailySettlementService added in Task 11
+        // In-memory daily-limit registry backing the OrionSaga set-initial-limit step.
+        // Singleton so limit state survives across request scopes.
+        services.AddSingleton<IAccountLimitRegistry, InMemoryAccountLimitRegistry>();
+
+        // OrionBeacon leader election. The package's LeaderElectionService (an IHostedService it
+        // registers) continuously acquires/renews a lease in the in-memory store; DailySettlementService
+        // only does work while this node holds leadership, so the periodic job runs on a single replica.
+        var beaconResource = cfg["Beacon:ResourceName"] ?? "orionshowcase:settlement";
+        var leaseSeconds = int.TryParse(cfg["Beacon:LeaseSeconds"], NumberStyles.Integer, CultureInfo.InvariantCulture, out var ls) ? ls : 30;
+        var renewSeconds = int.TryParse(cfg["Beacon:RenewSeconds"], NumberStyles.Integer, CultureInfo.InvariantCulture, out var rs) ? rs : 10;
+
+        // Logs leadership transitions; resolved by AddOrionBeacon's LeaderElector factory.
+        services.AddSingleton<ILeadershipObserver, LoggingLeadershipObserver>();
+        services.AddOrionBeacon(o =>
+        {
+            o.ResourceName = beaconResource;
+            o.CandidateId = $"{Environment.MachineName}:{Environment.ProcessId.ToString(CultureInfo.InvariantCulture)}";
+            o.LeaseDuration = TimeSpan.FromSeconds(leaseSeconds);
+            o.RenewInterval = TimeSpan.FromSeconds(renewSeconds);
+        });
+
+        // DailySettlementService added in Task 11; now gated on OrionBeacon leadership.
         services.AddScoped<RunDailySettlement>();
         services.AddHostedService<DailySettlementService>();
 

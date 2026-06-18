@@ -1,0 +1,148 @@
+namespace Moongazing.OrionShowcase.Application.Accounts.Sagas;
+
+using Microsoft.Extensions.Logging;
+using Moongazing.OrionSaga.Orchestration;
+using Moongazing.OrionShowcase.Application.Abstractions;
+using Moongazing.OrionShowcase.Domain.Abstractions;
+using Moongazing.OrionShowcase.Domain.Accounts;
+using Moongazing.OrionShowcase.Domain.Repositories;
+using Moongazing.OrionShowcase.Domain.ValueObjects;
+
+/// <summary>
+/// Drives account opening as an OrionSaga in-process saga so that each step's side effect
+/// is paired with a compensating action. If a later step throws, OrionSaga rolls back the
+/// completed steps in reverse order.
+/// </summary>
+/// <remarks>
+/// <para>Steps and their compensations:</para>
+/// <list type="number">
+///   <item><description><c>validate-customer</c> - confirms the customer exists. Read-only, no compensation.</description></item>
+///   <item><description><c>create-account</c> - opens the <see cref="Account"/> aggregate and persists it (which emits
+///     <see cref="AccountOpened"/> through the outbox). Compensation closes the account so a partial open never lingers.</description></item>
+///   <item><description><c>set-initial-limit</c> - assigns the initial daily transfer limit via
+///     <see cref="IAccountLimitRegistry"/>. Compensation removes the limit.</description></item>
+/// </list>
+/// <para>
+/// The deliberate failure hook (<see cref="AccountOpeningContext.ForceFailureAfterLimit"/>) exists so the
+/// compensation path can be exercised end to end from a test or a demo request without corrupting real data.
+/// </para>
+/// </remarks>
+public sealed class AccountOpeningSaga
+{
+    private readonly IAccountRepository _accounts;
+    private readonly ICustomerRepository _customers;
+    private readonly IUnitOfWork _uow;
+    private readonly IAccountLimitRegistry _limits;
+    private readonly IClock _clock;
+    private readonly ILogger<AccountOpeningSaga> _log;
+
+    // Initial daily transfer limit assigned to every newly opened account.
+    private const decimal DefaultDailyLimit = 10_000m;
+
+    public AccountOpeningSaga(
+        IAccountRepository accounts,
+        ICustomerRepository customers,
+        IUnitOfWork uow,
+        IAccountLimitRegistry limits,
+        IClock clock,
+        ILogger<AccountOpeningSaga> log)
+    {
+        _accounts = accounts;
+        _customers = customers;
+        _uow = uow;
+        _limits = limits;
+        _clock = clock;
+        _log = log;
+    }
+
+    /// <summary>Runs the account-opening saga and returns the saga outcome plus the opened account context.</summary>
+    public async Task<(SagaResult Result, AccountOpeningContext Context)> RunAsync(
+        AccountOpeningContext context,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(context);
+
+        var saga = new SagaBuilder<AccountOpeningContext>()
+            .AddStep(
+                name: "validate-customer",
+                execute: ValidateCustomerAsync,
+                compensate: NoCompensation)
+            .AddStep(
+                name: "create-account",
+                execute: CreateAccountAsync,
+                compensate: CompensateCreateAccountAsync)
+            .AddStep(
+                name: "set-initial-limit",
+                execute: SetInitialLimitAsync,
+                compensate: CompensateInitialLimitAsync)
+            .Build();
+
+        var result = await saga.RunAsync(context, cancellationToken).ConfigureAwait(false);
+        return (result, context);
+    }
+
+    private async Task ValidateCustomerAsync(AccountOpeningContext ctx, CancellationToken ct)
+    {
+        var customer = await _customers.GetAsync(ctx.CustomerId, ct).ConfigureAwait(false);
+        if (customer is null)
+        {
+            throw new InvalidOperationException($"Customer '{ctx.CustomerId.Value}' was not found.");
+        }
+    }
+
+    private async Task CreateAccountAsync(AccountOpeningContext ctx, CancellationToken ct)
+    {
+        var iban = new Iban(ctx.Iban);
+        var opening = new Money(ctx.OpeningAmount, ctx.Currency);
+        var account = Account.Open(ctx.CustomerId, iban, opening, _clock);
+
+        await _accounts.AddAsync(account, ct).ConfigureAwait(false);
+        await _uow.SaveChangesAsync(ct).ConfigureAwait(false);
+
+        ctx.AccountId = account.Id;
+    }
+
+    private async Task CompensateCreateAccountAsync(AccountOpeningContext ctx, CancellationToken ct)
+    {
+        if (ctx.AccountId is null)
+        {
+            return;
+        }
+
+        var account = await _accounts.GetAsync(ctx.AccountId.Value, ct).ConfigureAwait(false);
+        if (account is null)
+        {
+            return;
+        }
+
+        // Closing the just-opened account is the inverse of create-account. Close() refuses a
+        // non-zero balance, so a non-zero opening deposit is withdrawn first to leave it empty.
+        if (account.Balance.Amount != 0m)
+        {
+            account.Withdraw(account.Balance, ctx.IdempotencyKey, _clock);
+        }
+        account.Close(_clock);
+        await _uow.SaveChangesAsync(ct).ConfigureAwait(false);
+    }
+
+    private Task SetInitialLimitAsync(AccountOpeningContext ctx, CancellationToken ct)
+    {
+        _limits.SetDailyLimit(ctx.AccountId!.Value, new Money(DefaultDailyLimit, ctx.Currency));
+
+        // Demo hook: lets a caller force the compensation path after the limit step succeeds.
+        if (ctx.ForceFailureAfterLimit)
+        {
+            throw new InvalidOperationException("Forced failure after set-initial-limit (saga compensation demo).");
+        }
+
+        return Task.CompletedTask;
+    }
+
+    private Task CompensateInitialLimitAsync(AccountOpeningContext ctx, CancellationToken ct)
+    {
+        _limits.RemoveLimit(ctx.AccountId!.Value);
+        return Task.CompletedTask;
+    }
+
+    private static Task NoCompensation(AccountOpeningContext ctx, CancellationToken ct) => Task.CompletedTask;
+}

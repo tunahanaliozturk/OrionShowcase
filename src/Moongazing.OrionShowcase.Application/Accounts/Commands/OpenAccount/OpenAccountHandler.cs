@@ -2,24 +2,17 @@ namespace Moongazing.OrionShowcase.Application.Accounts.Commands.OpenAccount;
 
 using MediatR;
 using Moongazing.OrionGuard.Core;
+using Moongazing.OrionShowcase.Application.Accounts.Sagas;
 using Moongazing.OrionShowcase.Application.Common;
-using Moongazing.OrionShowcase.Domain.Abstractions;
-using Moongazing.OrionShowcase.Domain.Accounts;
-using Moongazing.OrionShowcase.Domain.Repositories;
-using Moongazing.OrionShowcase.Domain.ValueObjects;
 
 public sealed class OpenAccountHandler
     : IRequestHandler<OpenAccountCommand, Result<OpenAccountResult>>
 {
-    private readonly IAccountRepository _accounts;
-    private readonly IUnitOfWork _uow;
-    private readonly IClock _clock;
+    private readonly AccountOpeningSaga _saga;
 
-    public OpenAccountHandler(IAccountRepository accounts, IUnitOfWork uow, IClock clock)
+    public OpenAccountHandler(AccountOpeningSaga saga)
     {
-        _accounts = accounts;
-        _uow = uow;
-        _clock = clock;
+        _saga = saga;
     }
 
     public async Task<Result<OpenAccountResult>> Handle(
@@ -28,13 +21,24 @@ public sealed class OpenAccountHandler
     {
         Ensure.NotNull(request);
 
-        var iban = new Iban(request.Iban);
-        var opening = new Money(request.OpeningAmount, request.Currency);
-        var account = Account.Open(request.CustomerId, iban, opening, _clock);
+        // Account opening runs as an OrionSaga: validate-customer -> create-account -> set-initial-limit,
+        // each with a compensating action so a partial open is rolled back rather than left dangling.
+        var context = new AccountOpeningContext(
+            request.CustomerId,
+            request.Iban,
+            request.OpeningAmount,
+            request.Currency,
+            request.IdempotencyKey);
 
-        await _accounts.AddAsync(account, cancellationToken).ConfigureAwait(false);
-        await _uow.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+        var (result, ctx) = await _saga.RunAsync(context, cancellationToken).ConfigureAwait(false);
 
-        return Result<OpenAccountResult>.Ok(new OpenAccountResult(account.Id.Value));
+        if (!result.Succeeded)
+        {
+            // The saga rolled back the completed steps. Surface the originating failure to the caller.
+            var reason = result.Failure?.Message ?? $"Account opening failed at step '{result.FailedStep}'.";
+            return Result<OpenAccountResult>.Fail(reason);
+        }
+
+        return Result<OpenAccountResult>.Ok(new OpenAccountResult(ctx.AccountId!.Value.Value));
     }
 }
