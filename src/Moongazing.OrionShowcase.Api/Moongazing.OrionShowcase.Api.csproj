@@ -28,6 +28,8 @@
     <PackageReference Include="OrionGrant" />
     <PackageReference Include="OrionLedger" />
     <PackageReference Include="OrionOnce" />
+    <PackageReference Include="OrionRelay" />
+    <PackageReference Include="OrionStream" />
     <ProjectReference Include="..\Moongazing.OrionShowcase.Infrastructure\Moongazing.OrionShowcase.Infrastructure.csproj" />
   </ItemGroup>
 </Project>

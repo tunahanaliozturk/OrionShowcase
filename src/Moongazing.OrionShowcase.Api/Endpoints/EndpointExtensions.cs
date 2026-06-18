@@ -20,6 +20,7 @@ public static class EndpointExtensions
         app.MapClose();
         app.MapGetBalance();
         app.MapGetTransactions();
+        app.MapAccountActivityStream();
         app.MapPartnerBalance();
         return app;
     }

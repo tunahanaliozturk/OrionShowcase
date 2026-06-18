@@ -4,12 +4,17 @@
     <IsPackable>false</IsPackable>
   </PropertyGroup>
   <ItemGroup>
+    <!-- Orion.Abstractions: foundational Orion contracts (IOrionClock, OrionInstrumentation) that the
+         event/domain-level Orion packages build on. It arrives transitively via OrionBeacon/OrionPatch;
+         referenced directly here to make the shared dependency explicit. -->
+    <PackageReference Include="Orion.Abstractions" />
     <PackageReference Include="Microsoft.EntityFrameworkCore" />
     <PackageReference Include="Microsoft.EntityFrameworkCore.Relational" />
     <PackageReference Include="Microsoft.EntityFrameworkCore.Design" />
     <PackageReference Include="Npgsql.EntityFrameworkCore.PostgreSQL" />
     <PackageReference Include="Microsoft.Extensions.Hosting" />
     <PackageReference Include="OrionAudit" />
+    <PackageReference Include="OrionBeacon" />
     <PackageReference Include="OrionKey" />
     <PackageReference Include="OrionLock" />
     <PackageReference Include="OrionLock.Postgres" />

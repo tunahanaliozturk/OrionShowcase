@@ -21,7 +21,17 @@
   <a href="https://github.com/tunahanaliozturk/OrionLock">OrionLock</a> ·
   <a href="https://github.com/tunahanaliozturk/OrionKey">OrionKey</a> ·
   <a href="https://github.com/tunahanaliozturk/OrionPatch">OrionPatch</a> ·
-  <a href="https://github.com/tunahanaliozturk/OrionVault">OrionVault</a>
+  <a href="https://github.com/tunahanaliozturk/OrionVault">OrionVault</a> ·
+  <a href="https://github.com/tunahanaliozturk/OrionLens">OrionLens</a> ·
+  <a href="https://github.com/tunahanaliozturk/OrionShade">OrionShade</a> ·
+  <a href="https://github.com/tunahanaliozturk/OrionGrant">OrionGrant</a> ·
+  <a href="https://github.com/tunahanaliozturk/OrionLedger">OrionLedger</a> ·
+  <a href="https://github.com/tunahanaliozturk/OrionOnce">OrionOnce</a> ·
+  <a href="https://github.com/tunahanaliozturk/OrionSaga">OrionSaga</a> ·
+  <a href="https://github.com/tunahanaliozturk/OrionRelay">OrionRelay</a> ·
+  <a href="https://github.com/tunahanaliozturk/OrionStream">OrionStream</a> ·
+  <a href="https://github.com/tunahanaliozturk/OrionBeacon">OrionBeacon</a> ·
+  <a href="https://github.com/tunahanaliozturk/Orion.Abstractions">Orion.Abstractions</a>
 </p>
 
 ---
@@ -185,16 +195,15 @@ Two locking patterns demonstrate OrionLock:
 
 **Single-instance hosted job:**
 
-[`DailySettlementService.cs`](src/Moongazing.OrionShowcase.Infrastructure/HostedServices/DailySettlementService.cs) is a `BackgroundService` that wakes at 23:55 UTC. Before doing any work it calls `TryAcquireAsync("settlement:daily")`. If the lock is already held (because another replica got there first), the service logs `Settlement skipped` and goes back to sleep. This is the standard pattern for daily jobs that must run exactly once across N horizontally-scaled API replicas.
+[`DailySettlementService.cs`](src/Moongazing.OrionShowcase.Infrastructure/HostedServices/DailySettlementService.cs) is a `BackgroundService` that wakes at 23:55 UTC. It now gates on OrionBeacon leader election (see the OrionBeacon entry above): if this node is not the elected leader, the service logs `Settlement skipped` and goes back to sleep. This is the standard pattern for daily jobs that must run exactly once across N horizontally-scaled API replicas. (OrionLock is still used for the transfer hot path's account locks below.)
 
 ```mermaid
 flowchart TD
-    Start([Replica wakes at 23:55 UTC]) --> Try{TryAcquireAsync<br/>'settlement:daily'}
-    Try -- "lease == null<br/>(another replica holds it)" --> Skip[Log 'Settlement skipped']
+    Start([Replica wakes at 23:55 UTC]) --> Try{OrionBeacon<br/>ILeaderElector.IsLeader?}
+    Try -- "not leader<br/>(another replica holds the lease)" --> Skip[Log 'Settlement skipped']
     Skip --> Sleep[Sleep until next run]
-    Try -- "lease acquired" --> Run[RunDailySettlement.ExecuteAsync<br/>close interest, EOD reports, ...]
-    Run --> Release[Dispose lease<br/>Postgres auto-releases on session end]
-    Release --> Sleep
+    Try -- "leader" --> Run[RunDailySettlement.ExecuteAsync<br/>close interest, EOD reports, ...]
+    Run --> Sleep
     Sleep --> Start
 
     classDef skip fill:#fee2e2,stroke:#991b1b,color:#7f1d1d
@@ -231,11 +240,31 @@ Customer PII (NationalId, Email, Phone) is encrypted at the database column leve
 - [`InfrastructureServiceCollectionExtensions.cs`](src/Moongazing.OrionShowcase.Infrastructure/DependencyInjection/InfrastructureServiceCollectionExtensions.cs) wires `AddOrionVault(o => { o.UseStaticKeys(...); }).UseEntityFrameworkCore<BankingDbContext>()` and the DbContext options call `UseOrionVault(sp)`.
 - At-rest verification: [`PiiEncryptionTests.cs`](test/Moongazing.OrionShowcase.IntegrationTests/Scenarios/PiiEncryptionTests.cs) reads `national_id` directly from Postgres as raw bytes via Npgsql and confirms the on-disk layout is `[keyId(2 BE) | nonce(12) | tag(16) | ciphertext]` — the 30-byte fixed overhead documented in OrionVault's spec.
 
+## The ten newly integrated Orion packages
+
+Beyond the original six, the showcase now integrates ten more Orion packages across two passes. The first five are cross-cutting infrastructure/auth concerns; the second five are domain- and event-level concerns wired into the account-opening and transfer flows.
+
+### Pass 1 — cross-cutting infrastructure and auth
+
+- **OrionLens** — ambient correlation context. `AddOrionLens()` / `UseOrionLens()` in [`Program.cs`](src/Moongazing.OrionShowcase.Api/Program.cs) mint or echo an `X-Correlation-ID` and propagate it as baggage before anything logs or authenticates. [`CorrelationEnricher.cs`](src/Moongazing.OrionShowcase.Api/Observability/CorrelationEnricher.cs) surfaces the correlation id on every Serilog event.
+- **OrionShade** — PII/secret log redaction. [`OrionShadeExtensions.cs`](src/Moongazing.OrionShowcase.Api/Redaction/OrionShadeExtensions.cs) registers an `IRedactor` used at customer-data log sites so TCKN/email/phone never reach the logs in the clear.
+- **OrionGrant** — policy-based authorization. [`OrionGrantExtensions.cs`](src/Moongazing.OrionShowcase.Api/Authorization/OrionGrantExtensions.cs) maps JWT roles to the banking permission set in [`BankingPermissions.cs`](src/Moongazing.OrionShowcase.Api/Authorization/BankingPermissions.cs); [`PermissionEndpointFilter.cs`](src/Moongazing.OrionShowcase.Api/Authorization/PermissionEndpointFilter.cs) enforces `RequirePermission(...)` on endpoints such as transfer.
+- **OrionLedger** — API-key issuance/verification. [`OrionLedgerExtensions.cs`](src/Moongazing.OrionShowcase.Api/ApiKeys/OrionLedgerExtensions.cs) plus [`ApiKeyAuthMiddleware.cs`](src/Moongazing.OrionShowcase.Api/ApiKeys/ApiKeyAuthMiddleware.cs) establish an `X-Api-Key` principal for the partner endpoints under `Endpoints/Partner/`.
+- **OrionOnce** — HTTP idempotency. `AddOrionOnce()` / `UseOrionOnce()` deduplicate mutating POSTs that carry an `Idempotency-Key` header, complementing the command-level `IdempotencyBehavior`.
+
+### Pass 2 — domain and event-level
+
+- **OrionSaga** — in-process saga with compensation. Account opening runs as a three-step saga in [`AccountOpeningSaga.cs`](src/Moongazing.OrionShowcase.Application/Accounts/Sagas/AccountOpeningSaga.cs): `validate-customer` -> `create-account` -> `set-initial-limit`. Each side-effecting step has a compensating action, so if a later step throws (the demo hook `ForceFailureAfterLimit` exercises this), OrionSaga rolls the completed steps back in reverse — the created account is closed and the daily limit is removed. `AddOrionSaga()` is registered in [`ApplicationServiceCollectionExtensions.cs`](src/Moongazing.OrionShowcase.Application/DependencyInjection/ApplicationServiceCollectionExtensions.cs); [`OpenAccountHandler.cs`](src/Moongazing.OrionShowcase.Application/Accounts/Commands/OpenAccount/OpenAccountHandler.cs) drives the saga and maps `SagaResult` to the command result.
+- **OrionRelay** — signed outbound webhooks. When a transfer completes, [`TransferEndpoint.cs`](src/Moongazing.OrionShowcase.Api/Endpoints/Accounts/TransferEndpoint.cs) dispatches a signed `transfer.completed` webhook through OrionRelay's `IWebhookDispatcher` (HMAC signing + retry policy). [`OrionRelayExtensions.cs`](src/Moongazing.OrionShowcase.Api/Webhooks/OrionRelayExtensions.cs) calls `AddOrionRelay(secret, ...)` with endpoint/secret from the `Relay` config section; when no partner is configured a [`StubWebhookHandler.cs`](src/Moongazing.OrionShowcase.Api/Webhooks/StubWebhookHandler.cs) short-circuits the transport so the app never fails, logging the signed request and the `Orion-Signature` header. Dispatch is best-effort: a partner outage never fails the committed transfer.
+- **OrionStream** — Server-Sent Events. `GET /api/accounts/{id}/activity/stream` ([`AccountActivityStreamEndpoint.cs`](src/Moongazing.OrionShowcase.Api/Endpoints/Accounts/AccountActivityStreamEndpoint.cs)) streams per-account activity over SSE via OrionStream's `ISseHub`, bounded by a 15-minute lifetime cap and the client abort token. When a transfer posts, [`AccountActivityPublisher.cs`](src/Moongazing.OrionShowcase.Api/Streaming/AccountActivityPublisher.cs) publishes a `transfer.posted` event to both the source and destination account topics. `AddOrionStream(...)` is registered in [`OrionStreamExtensions.cs`](src/Moongazing.OrionShowcase.Api/Streaming/OrionStreamExtensions.cs).
+- **OrionBeacon** — leader election. The daily settlement job is now leader-only: [`DailySettlementService.cs`](src/Moongazing.OrionShowcase.Infrastructure/HostedServices/DailySettlementService.cs) only runs while `ILeaderElector.IsLeader`, so across N replicas the job fires on exactly one node. `AddOrionBeacon(...)` in [`InfrastructureServiceCollectionExtensions.cs`](src/Moongazing.OrionShowcase.Infrastructure/DependencyInjection/InfrastructureServiceCollectionExtensions.cs) uses the in-memory lease store (single-node dev) and [`LoggingLeadershipObserver.cs`](src/Moongazing.OrionShowcase.Infrastructure/HostedServices/LoggingLeadershipObserver.cs) logs each leadership transition. Configuration lives under the `Beacon` section.
+- **Orion.Abstractions** — foundational Orion contracts. It arrives transitively via the event/domain-level packages; the Infrastructure project references it directly for clarity and [`SystemClock.cs`](src/Moongazing.OrionShowcase.Infrastructure/Time/SystemClock.cs) implements its `IOrionClock` alongside the domain `IClock`, so the app and the Orion packages read wall-clock time from one source.
+
 ## Where we deliberately use packages from outside the Orion family
 
 Honesty section. Not every component in the stack has an Orion equivalent, and the ones below are industry standards we use without apology:
 
-- **MediatR** for CQRS — no Orion equivalent (yet). MediatR is the de-facto standard.
+- **MediatR** for CQRS — no Orion equivalent. MediatR is the de-facto standard. (Multi-step workflows with compensation now use OrionSaga; MediatR still carries the request/response dispatch.)
 - **OpenTelemetry SDK + OTLP exporter** for traces and metrics — open standard, exports Orion ActivitySources/Meters to Jaeger.
 - **Microsoft.AspNetCore.Authentication.JwtBearer** for JWT validation — in-box, no Orion equivalent.
 - **Microsoft.AspNetCore.RateLimiting** for per-endpoint rate limits — OrionGuard.AspNetCore 6.4.2 is a validation + ProblemDetails package, not a rate limiter. The policy names in `appsettings.json` are prefixed with `OrionGuard:Policies` for narrative consistency, but the actual middleware is ASP.NET Core's in-box one.
@@ -392,6 +421,16 @@ See [ROADMAP.md](ROADMAP.md). Highlights:
 | [Moongazing.OrionKey](https://github.com/tunahanaliozturk/OrionKey) | Snowflake IDs and GUID v7 generators |
 | [Moongazing.OrionPatch](https://github.com/tunahanaliozturk/OrionPatch) | Transactional outbox for EF Core |
 | [Moongazing.OrionVault](https://github.com/tunahanaliozturk/OrionVault) | Column encryption at rest (AES-256-GCM) |
+| [Moongazing.OrionLens](https://github.com/tunahanaliozturk/OrionLens) | Ambient correlation context + propagation |
+| [Moongazing.OrionShade](https://github.com/tunahanaliozturk/OrionShade) | PII/secret log redaction |
+| [Moongazing.OrionGrant](https://github.com/tunahanaliozturk/OrionGrant) | Policy-based authorization |
+| [Moongazing.OrionLedger](https://github.com/tunahanaliozturk/OrionLedger) | API-key issuance and verification |
+| [Moongazing.OrionOnce](https://github.com/tunahanaliozturk/OrionOnce) | HTTP idempotency for mutating requests |
+| [Moongazing.OrionSaga](https://github.com/tunahanaliozturk/OrionSaga) | In-process saga with compensation |
+| [Moongazing.OrionRelay](https://github.com/tunahanaliozturk/OrionRelay) | Signed outbound webhooks |
+| [Moongazing.OrionStream](https://github.com/tunahanaliozturk/OrionStream) | Server-Sent Events hub |
+| [Moongazing.OrionBeacon](https://github.com/tunahanaliozturk/OrionBeacon) | Leader election for single-instance jobs |
+| [Moongazing.Orion.Abstractions](https://github.com/tunahanaliozturk/Orion.Abstractions) | Shared Orion contracts (IOrionClock, instrumentation) |
 
 ## License
 

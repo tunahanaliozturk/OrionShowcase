@@ -1,6 +1,8 @@
 using MediatR;
 using Microsoft.Extensions.DependencyInjection;
 using Moongazing.OrionGuard.DependencyInjection;
+using Moongazing.OrionSaga;
+using Moongazing.OrionShowcase.Application.Accounts.Sagas;
 using Moongazing.OrionShowcase.Application.Pipeline;
 
 namespace Moongazing.OrionShowcase.Application.DependencyInjection;
@@ -30,6 +32,11 @@ public static class ApplicationServiceCollectionExtensions
                 }
             }
         }
+
+        // OrionSaga: registers SagaDiagnostics so saga runs/steps/compensations are metered.
+        // The account-opening workflow is modelled as a saga with per-step compensation.
+        services.AddOrionSaga();
+        services.AddScoped<AccountOpeningSaga>();
 
         // Pipeline order: outermost first
         services.AddTransient(typeof(IPipelineBehavior<,>), typeof(LoggingBehavior<,>));

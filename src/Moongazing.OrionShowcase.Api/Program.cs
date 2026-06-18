@@ -12,7 +12,9 @@ using Moongazing.OrionShowcase.Api.Health;
 using Moongazing.OrionShowcase.Api.Observability;
 using Moongazing.OrionShowcase.Api.RateLimiting;
 using Moongazing.OrionShowcase.Api.Redaction;
+using Moongazing.OrionShowcase.Api.Streaming;
 using Moongazing.OrionShowcase.Api.Swagger;
+using Moongazing.OrionShowcase.Api.Webhooks;
 using Moongazing.OrionShowcase.Application.DependencyInjection;
 using Moongazing.OrionShowcase.Infrastructure.DependencyInjection;
 using Moongazing.OrionShowcase.Infrastructure.Persistence;
@@ -42,7 +44,11 @@ builder.Services
     // OrionOnce: HTTP idempotency for mutating requests honoring the Idempotency-Key header. The
     // default guarded set already covers POST (idempotent GET/HEAD/OPTIONS are excluded); a key is
     // optional, so requests without an Idempotency-Key pass through unchanged.
-    .AddOrionOnce();
+    .AddOrionOnce()
+    // OrionRelay: signed transfer.completed webhooks to a partner endpoint (stub transport when unset).
+    .AddPartnerWebhooks(builder.Configuration)
+    // OrionStream: SSE hub backing GET /api/accounts/{id}/activity/stream.
+    .AddAccountActivityStreaming();
 
 var app = builder.Build();
 

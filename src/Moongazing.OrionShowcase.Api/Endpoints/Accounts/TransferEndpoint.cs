@@ -5,9 +5,12 @@ using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.AspNetCore.Routing;
+using Moongazing.OrionStream.Streaming;
 using Moongazing.OrionShowcase.Api.Authorization;
 using Moongazing.OrionShowcase.Api.Filters;
 using Moongazing.OrionShowcase.Api.RateLimiting;
+using Moongazing.OrionShowcase.Api.Streaming;
+using Moongazing.OrionShowcase.Api.Webhooks;
 using Moongazing.OrionShowcase.Application.Accounts.Commands.TransferMoney;
 using Moongazing.OrionShowcase.Domain.ValueObjects;
 
@@ -30,10 +33,17 @@ internal static class TransferEndpoint
     }
 
     private static async Task<IResult> Handle(
-        Guid fromAccountId, TransferRequest req, IMediator mediator, CancellationToken cancellationToken)
+        Guid fromAccountId,
+        TransferRequest req,
+        IMediator mediator,
+        PartnerWebhookNotifier webhooks,
+        ISseHub activityHub,
+        CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(req);
         ArgumentNullException.ThrowIfNull(mediator);
+        ArgumentNullException.ThrowIfNull(webhooks);
+        ArgumentNullException.ThrowIfNull(activityHub);
         try
         {
             var result = await mediator.Send(new TransferMoneyCommand(
@@ -42,9 +52,33 @@ internal static class TransferEndpoint
                 new Money(req.Amount, Enum.Parse<Currency>(req.Currency)),
                 new IdempotencyKey(req.IdempotencyKey)), cancellationToken).ConfigureAwait(false);
 
-            return result.IsSuccess
-                ? Results.Ok(new TransferResponse(result.Value!.TransferId, result.Value.NewSourceBalance))
-                : Results.Problem(detail: result.Error, statusCode: 409);
+            if (!result.IsSuccess)
+            {
+                return Results.Problem(detail: result.Error, statusCode: 409);
+            }
+
+            // OrionStream: publish the posted transfer to both accounts' activity topics so any
+            // open SSE subscriber sees the balance movement in real time.
+            AccountActivityPublisher.PublishTransferPosted(
+                activityHub,
+                result.Value!.TransferId,
+                fromAccountId,
+                req.ToAccountId,
+                req.Amount,
+                req.Currency,
+                result.Value.NewSourceBalance);
+
+            // OrionRelay: dispatch a signed transfer.completed webhook to the configured partner.
+            // Best-effort and non-blocking on failure; the transfer is already committed.
+            await webhooks.NotifyTransferCompletedAsync(
+                result.Value.TransferId,
+                fromAccountId,
+                req.ToAccountId,
+                req.Amount,
+                req.Currency,
+                cancellationToken).ConfigureAwait(false);
+
+            return Results.Ok(new TransferResponse(result.Value.TransferId, result.Value.NewSourceBalance));
         }
         catch (Exception ex) when (DomainExceptionFilter.TryHandle(ex) is { } r) { return r; }
     }
