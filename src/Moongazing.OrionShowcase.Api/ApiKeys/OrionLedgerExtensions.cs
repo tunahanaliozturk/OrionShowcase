@@ -15,6 +15,12 @@ public static class OrionLedgerExtensions
     public const string PartnerReadScope = "partner:read";
 
     /// <summary>
+    /// The subject (key owner) the demo key is issued under. Bulk revocation operates per subject,
+    /// so the seeded key carries one; rotation preserves it on the successor key.
+    /// </summary>
+    public const string DemoPartnerSubject = "partner:demo";
+
+    /// <summary>
     /// A fixed demo API key for local/dev use. Production keys are issued via
     /// <see cref="IApiKeyService.IssueAsync"/> and never hard-coded; this constant exists only so the
     /// showcase has a presentable <c>X-Api-Key</c> value.
@@ -39,6 +45,7 @@ public static class OrionLedgerExtensions
             {
                 Id = "demo-partner",
                 Name = "Demo Partner",
+                Subject = DemoPartnerSubject,
                 DisplayPrefix = ApiKeyGenerator.DisplayPrefix(DemoApiKey),
                 Hash = ApiKeyHasher.Hash(DemoApiKey),
                 Scopes = new HashSet<string>(StringComparer.Ordinal) { PartnerReadScope },
