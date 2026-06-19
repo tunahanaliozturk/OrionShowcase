@@ -34,8 +34,17 @@ public sealed class OpenAccountHandler
 
         if (!result.Succeeded)
         {
-            // The saga rolled back the completed steps. Surface the originating failure to the caller.
-            var reason = result.Failure?.Message ?? $"Account opening failed at step '{result.FailedStep}'.";
+            // The saga rolled back the completed steps. Distinguish an operational timeout/cancellation
+            // from a genuine business failure so the caller does not read a slow dependency or an
+            // aborted request as a rejected open. OrionSaga 0.2 separates these via TimedOut/Cancelled.
+            var reason = result switch
+            {
+                { TimedOut: true } =>
+                    $"Account opening timed out at step '{result.FailedStep}'. Please retry.",
+                { Cancelled: true } =>
+                    $"Account opening was cancelled at step '{result.FailedStep}'.",
+                _ => result.Failure?.Message ?? $"Account opening failed at step '{result.FailedStep}'.",
+            };
             return Result<OpenAccountResult>.Fail(reason);
         }
 

@@ -4,6 +4,7 @@ using System.Globalization;
 using MediatR;
 using Moongazing.OrionGuard.Core;
 using Moongazing.OrionLock;
+using Moongazing.OrionShowcase.Application.Accounts;
 using Moongazing.OrionShowcase.Application.Common;
 using Moongazing.OrionShowcase.Domain.Abstractions;
 using Moongazing.OrionShowcase.Domain.Accounts;
@@ -13,23 +14,15 @@ using Moongazing.OrionShowcase.Domain.ValueObjects;
 public sealed class TransferMoneyHandler
     : IRequestHandler<TransferMoneyCommand, Result<TransferMoneyResult>>
 {
-    private static readonly DistributedLockOptions LockOptions = new()
-    {
-        LeaseDuration = TimeSpan.FromSeconds(30),
-        WaitTimeout = TimeSpan.FromSeconds(10),
-        RetryInterval = TimeSpan.FromMilliseconds(250),
-        AutoRenew = true,
-    };
-
     private readonly IAccountRepository _accounts;
     private readonly IUnitOfWork _uow;
-    private readonly IDistributedLock _locker;
+    private readonly ISharedExclusiveLock _locker;
     private readonly IClock _clock;
 
     public TransferMoneyHandler(
         IAccountRepository accounts,
         IUnitOfWork uow,
-        IDistributedLock locker,
+        ISharedExclusiveLock locker,
         IClock clock)
     {
         _accounts = accounts;
@@ -44,9 +37,12 @@ public sealed class TransferMoneyHandler
     {
         Ensure.NotNull(request);
 
-        // Sort the two account ids so two concurrent transfers between the same
-        // pair always acquire the locks in the same order. This avoids the classic
-        // deadlock pattern (A then B vs B then A).
+        // A transfer mutates both balances, so it takes an EXCLUSIVE (writer) hold on each account
+        // via OrionLock 0.4's ISharedExclusiveLock. The exclusive hold excludes both concurrent
+        // mutations and concurrent balance reads (which take a shared hold) on the same account.
+        //
+        // Sort the two account ids so two concurrent transfers between the same pair always acquire
+        // the holds in the same order. This avoids the classic deadlock pattern (A then B vs B then A).
         var firstId = request.From;
         var secondId = request.To;
         if (string.CompareOrdinal(
@@ -56,16 +52,16 @@ public sealed class TransferMoneyHandler
             (firstId, secondId) = (secondId, firstId);
         }
 
-        var firstKey = LockKey(firstId);
-        var secondKey = LockKey(secondId);
+        var firstKey = AccountLock.KeyFor(firstId);
+        var secondKey = AccountLock.KeyFor(secondId);
 
         var firstHandle = await _locker
-            .AcquireAsync(firstKey, LockOptions, cancellationToken)
+            .AcquireExclusiveAsync(firstKey, AccountLock.Options, cancellationToken)
             .ConfigureAwait(false);
         await using var firstLock = firstHandle.ConfigureAwait(false);
 
         var secondHandle = await _locker
-            .AcquireAsync(secondKey, LockOptions, cancellationToken)
+            .AcquireExclusiveAsync(secondKey, AccountLock.Options, cancellationToken)
             .ConfigureAwait(false);
         await using var secondLock = secondHandle.ConfigureAwait(false);
 
@@ -102,7 +98,4 @@ public sealed class TransferMoneyHandler
         return Result<TransferMoneyResult>.Ok(
             new TransferMoneyResult(Guid.NewGuid(), from.Balance.Amount));
     }
-
-    private static string LockKey(AccountId id) =>
-        $"account:{id.Value.ToString("N", CultureInfo.InvariantCulture)}";
 }

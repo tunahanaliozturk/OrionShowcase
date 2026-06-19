@@ -19,5 +19,8 @@
   <ItemGroup>
     <ProjectReference Include="..\..\src\Moongazing.OrionShowcase.Application\Moongazing.OrionShowcase.Application.csproj" />
     <ProjectReference Include="..\..\src\Moongazing.OrionShowcase.Domain\Moongazing.OrionShowcase.Domain.csproj" />
+    <!-- Referenced so the in-memory reader-writer lock provider (the backend behind OrionLock 0.4's
+         ISharedExclusiveLock in this sample) can be exercised directly without Docker / Postgres. -->
+    <ProjectReference Include="..\..\src\Moongazing.OrionShowcase.Infrastructure\Moongazing.OrionShowcase.Infrastructure.csproj" />
   </ItemGroup>
 </Project>

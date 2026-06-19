@@ -32,28 +32,39 @@ public class TransferMoneyHandlerTests
         public Task<int> SaveChangesAsync(CancellationToken ct) { Calls++; return Task.FromResult(1); }
     }
 
-    // Records lock keys in the order AcquireAsync is invoked. Returns a handle
-    // whose disposal also gets recorded so we can verify release on success and error paths.
-    private sealed class RecordingLock : IDistributedLock
+    // Records, in invocation order, the (key, mode) pairs acquired and the keys released, so a test
+    // can assert a transfer takes an EXCLUSIVE hold on each account in deterministic (sorted) order
+    // and releases both on the success and error paths.
+    private sealed class RecordingLock : ISharedExclusiveLock
     {
-        public List<string> Acquired { get; } = new();
+        public List<(string Key, LockMode Mode)> Acquired { get; } = new();
         public List<string> Released { get; } = new();
 
-        public Task<IDistributedLockHandle> AcquireAsync(
-            string key,
-            DistributedLockOptions? options = null,
-            CancellationToken cancellationToken = default)
+        public Task<IDistributedLockHandle> AcquireExclusiveAsync(
+            string key, DistributedLockOptions? options = null, CancellationToken cancellationToken = default) =>
+            Acquire(key, LockMode.Exclusive);
+
+        public Task<IDistributedLockHandle> AcquireSharedAsync(
+            string key, DistributedLockOptions? options = null, CancellationToken cancellationToken = default) =>
+            Acquire(key, LockMode.Shared);
+
+        public Task<IDistributedLockHandle?> TryAcquireExclusiveAsync(
+            string key, DistributedLockOptions? options = null, CancellationToken cancellationToken = default) =>
+            TryAcquire(key, LockMode.Exclusive);
+
+        public Task<IDistributedLockHandle?> TryAcquireSharedAsync(
+            string key, DistributedLockOptions? options = null, CancellationToken cancellationToken = default) =>
+            TryAcquire(key, LockMode.Shared);
+
+        private Task<IDistributedLockHandle> Acquire(string key, LockMode mode)
         {
-            Acquired.Add(key);
+            Acquired.Add((key, mode));
             return Task.FromResult<IDistributedLockHandle>(new Handle(key, this));
         }
 
-        public Task<IDistributedLockHandle?> TryAcquireAsync(
-            string key,
-            DistributedLockOptions? options = null,
-            CancellationToken cancellationToken = default)
+        private Task<IDistributedLockHandle?> TryAcquire(string key, LockMode mode)
         {
-            Acquired.Add(key);
+            Acquired.Add((key, mode));
             return Task.FromResult<IDistributedLockHandle?>(new Handle(key, this));
         }
 
@@ -126,8 +137,11 @@ public class TransferMoneyHandlerTests
         to.Balance.Amount.Should().Be(40m);
         uow.Calls.Should().Be(1);
         locker.Acquired.Should().HaveCount(2);
-        locker.Acquired[0].Should().Contain(lower.Value.ToString("N"));
-        locker.Acquired[1].Should().Contain(higher.Value.ToString("N"));
+        // Both holds are EXCLUSIVE (a transfer mutates both balances) and taken in sorted id order.
+        locker.Acquired[0].Mode.Should().Be(LockMode.Exclusive);
+        locker.Acquired[1].Mode.Should().Be(LockMode.Exclusive);
+        locker.Acquired[0].Key.Should().Contain(lower.Value.ToString("N"));
+        locker.Acquired[1].Key.Should().Contain(higher.Value.ToString("N"));
         locker.Released.Should().HaveCount(2);
     }
 

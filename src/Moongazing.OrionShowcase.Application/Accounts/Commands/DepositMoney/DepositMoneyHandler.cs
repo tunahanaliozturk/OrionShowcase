@@ -2,6 +2,8 @@ namespace Moongazing.OrionShowcase.Application.Accounts.Commands.DepositMoney;
 
 using MediatR;
 using Moongazing.OrionGuard.Core;
+using Moongazing.OrionLock;
+using Moongazing.OrionShowcase.Application.Accounts;
 using Moongazing.OrionShowcase.Application.Common;
 using Moongazing.OrionShowcase.Domain.Abstractions;
 using Moongazing.OrionShowcase.Domain.Accounts;
@@ -13,12 +15,18 @@ public sealed class DepositMoneyHandler
 {
     private readonly IAccountRepository _accounts;
     private readonly IUnitOfWork _uow;
+    private readonly ISharedExclusiveLock _locker;
     private readonly IClock _clock;
 
-    public DepositMoneyHandler(IAccountRepository accounts, IUnitOfWork uow, IClock clock)
+    public DepositMoneyHandler(
+        IAccountRepository accounts,
+        IUnitOfWork uow,
+        ISharedExclusiveLock locker,
+        IClock clock)
     {
         _accounts = accounts;
         _uow = uow;
+        _locker = locker;
         _clock = clock;
     }
 
@@ -27,6 +35,13 @@ public sealed class DepositMoneyHandler
         CancellationToken cancellationToken)
     {
         Ensure.NotNull(request);
+
+        // A deposit mutates the balance, so take an EXCLUSIVE (writer) hold on the account: it
+        // excludes concurrent mutations and concurrent balance reads of the same account.
+        var handle = await _locker
+            .AcquireExclusiveAsync(AccountLock.KeyFor(request.AccountId), AccountLock.Options, cancellationToken)
+            .ConfigureAwait(false);
+        await using var accountLock = handle.ConfigureAwait(false);
 
         var account = await _accounts.GetAsync(request.AccountId, cancellationToken).ConfigureAwait(false);
         if (account is null)

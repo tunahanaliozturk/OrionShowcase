@@ -1,6 +1,7 @@
 namespace Moongazing.OrionShowcase.Application.Tests.Accounts;
 
 using FluentAssertions;
+using Moongazing.OrionLock;
 using Moongazing.OrionShowcase.Application.Accounts.Commands.DepositMoney;
 using Moongazing.OrionShowcase.Domain.Abstractions;
 using Moongazing.OrionShowcase.Domain.Accounts;
@@ -47,7 +48,8 @@ public class DepositMoneyHandlerTests
         var uow = new CountingUow();
         var account = NewActiveAccount(clock);
         repo.Store[account.Id] = account;
-        var sut = new DepositMoneyHandler(repo, uow, clock);
+        var locker = new StubSharedExclusiveLock();
+        var sut = new DepositMoneyHandler(repo, uow, locker, clock);
 
         var cmd = new DepositMoneyCommand(
             AccountId: account.Id,
@@ -60,6 +62,9 @@ public class DepositMoneyHandlerTests
         result.IsSuccess.Should().BeTrue();
         result.Value!.NewBalance.Should().Be(150m);
         uow.Calls.Should().Be(1);
+        // A deposit mutates the balance, so it takes an exclusive hold and releases it.
+        locker.AcquiredModes.Should().ContainSingle().Which.Should().Be(LockMode.Exclusive);
+        locker.Released.Should().Be(1);
     }
 
     [Fact]
@@ -68,7 +73,7 @@ public class DepositMoneyHandlerTests
         var clock = new FixedClock();
         var repo = new FakeAccountRepo();
         var uow = new CountingUow();
-        var sut = new DepositMoneyHandler(repo, uow, clock);
+        var sut = new DepositMoneyHandler(repo, uow, new StubSharedExclusiveLock(), clock);
 
         var cmd = new DepositMoneyCommand(
             AccountId: new AccountId(Guid.NewGuid()),

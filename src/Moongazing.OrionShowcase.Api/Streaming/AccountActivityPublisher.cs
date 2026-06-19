@@ -56,14 +56,28 @@ public static class AccountActivityPublisher
             at = DateTimeOffset.UtcNow,
         };
 
-        hub.Publish(TopicFor(fromAccountId), ToEvent(transferId, debit));
-        hub.Publish(TopicFor(toAccountId), ToEvent(transferId, credit));
+        hub.Publish(TopicFor(fromAccountId), ToEvent(WireId(transferId, "debit"), debit));
+        hub.Publish(TopicFor(toAccountId), ToEvent(WireId(transferId, "credit"), credit));
     }
 
-    private static ServerSentEvent ToEvent(Guid transferId, object payload) => new()
+    /// <summary>
+    /// Builds the stable, resume-usable wire id stamped on an emitted event (the SSE <c>id:</c>
+    /// field). OrionStream 0.2 resume matches a reconnecting client's <c>Last-Event-ID</c> against
+    /// this exact value, so it must be stable (the same logical event always renders the same id)
+    /// and unique within a topic. The transfer id plus the leg direction satisfies both: a single
+    /// account that is both source and destination of the same transfer (a self-transfer) would
+    /// otherwise see two events with the same id on one topic, which would make the resume cursor
+    /// ambiguous.
+    /// </summary>
+    private static string WireId(Guid transferId, string leg) =>
+        transferId.ToString("N", CultureInfo.InvariantCulture) + ":" + leg;
+
+    private static ServerSentEvent ToEvent(string wireId, object payload) => new()
     {
         EventName = "activity",
-        Id = transferId.ToString("N", CultureInfo.InvariantCulture),
+        // Producer-supplied id. OrionStream uses it verbatim as the wire id and as the resume
+        // cursor; it takes precedence over the hub's monotonic sequence.
+        Id = wireId,
         Data = JsonSerializer.Serialize(payload, JsonOptions),
     };
 }

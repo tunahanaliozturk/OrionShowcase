@@ -27,7 +27,7 @@ using Moongazing.OrionShowcase.Domain.ValueObjects;
 /// compensation path can be exercised end to end from a test or a demo request without corrupting real data.
 /// </para>
 /// </remarks>
-public sealed class AccountOpeningSaga
+public sealed partial class AccountOpeningSaga
 {
     private readonly IAccountRepository _accounts;
     private readonly ICustomerRepository _customers;
@@ -38,6 +38,11 @@ public sealed class AccountOpeningSaga
 
     // Initial daily transfer limit assigned to every newly opened account.
     private const decimal DefaultDailyLimit = 10_000m;
+
+    // Per-step budget for the customer-existence check. If the lookup overruns this, OrionSaga
+    // cancels the step and rolls back, reporting a distinct timeout outcome (not a business failure)
+    // so a slow dependency is handled as an operational signal rather than a rejected open.
+    private static readonly TimeSpan ValidateCustomerTimeout = TimeSpan.FromSeconds(5);
 
     public AccountOpeningSaga(
         IAccountRepository accounts,
@@ -66,7 +71,8 @@ public sealed class AccountOpeningSaga
             .AddStep(
                 name: "validate-customer",
                 execute: ValidateCustomerAsync,
-                compensate: NoCompensation)
+                compensate: NoCompensation,
+                timeout: context.ValidateCustomerTimeout ?? ValidateCustomerTimeout)
             .AddStep(
                 name: "create-account",
                 execute: CreateAccountAsync,
@@ -78,11 +84,53 @@ public sealed class AccountOpeningSaga
             .Build();
 
         var result = await saga.RunAsync(context, cancellationToken).ConfigureAwait(false);
+
+        // Log the three terminal outcomes distinctly. A per-step timeout or a cancellation is an
+        // operational signal (slow dependency, shutdown, client abort), NOT a business rejection, so
+        // it must not be logged or surfaced as a generic failure. OrionSaga 0.2 separates these via
+        // SagaResult.TimedOut / Cancelled / Failed.
+        if (result.Succeeded)
+        {
+            LogSucceeded(context.CustomerId.Value);
+        }
+        else if (result.TimedOut)
+        {
+            LogTimedOut(result.FailedStep, context.CustomerId.Value);
+        }
+        else if (result.Cancelled)
+        {
+            LogCancelled(result.FailedStep, context.CustomerId.Value);
+        }
+        else
+        {
+            LogFailed(result.Failure, result.FailedStep, context.CustomerId.Value);
+        }
+
         return (result, context);
     }
 
+    [LoggerMessage(Level = LogLevel.Information, Message = "Account-opening saga succeeded for customer {CustomerId}.")]
+    private partial void LogSucceeded(Guid customerId);
+
+    [LoggerMessage(Level = LogLevel.Warning, Message = "Account-opening saga timed out at step '{Step}' for customer {CustomerId}; completed steps were rolled back.")]
+    private partial void LogTimedOut(string? step, Guid customerId);
+
+    [LoggerMessage(Level = LogLevel.Warning, Message = "Account-opening saga was cancelled at step '{Step}' for customer {CustomerId}; completed steps were rolled back.")]
+    private partial void LogCancelled(string? step, Guid customerId);
+
+    [LoggerMessage(Level = LogLevel.Error, Message = "Account-opening saga failed at step '{Step}' for customer {CustomerId}; completed steps were rolled back.")]
+    private partial void LogFailed(Exception? failure, string? step, Guid customerId);
+
     private async Task ValidateCustomerAsync(AccountOpeningContext ctx, CancellationToken ct)
     {
+        // Demo/test hook: an injected delay simulates a slow lookup. It observes the step's
+        // cancellation token, which OrionSaga links to the per-step timeout, so an overrun trips the
+        // timeout and the saga reports it distinctly rather than as a business failure.
+        if (ctx.ValidateCustomerDelay is { } delay && delay > TimeSpan.Zero)
+        {
+            await Task.Delay(delay, ct).ConfigureAwait(false);
+        }
+
         var customer = await _customers.GetAsync(ctx.CustomerId, ct).ConfigureAwait(false);
         if (customer is null)
         {

@@ -1,6 +1,7 @@
 namespace Moongazing.OrionShowcase.Application.Tests.Accounts;
 
 using FluentAssertions;
+using Moongazing.OrionLock;
 using Moongazing.OrionShowcase.Application.Accounts.Commands.WithdrawMoney;
 using Moongazing.OrionShowcase.Domain.Abstractions;
 using Moongazing.OrionShowcase.Domain.Accounts;
@@ -47,7 +48,8 @@ public class WithdrawMoneyHandlerTests
         var uow = new CountingUow();
         var account = NewActiveAccount(clock, opening: 100m);
         repo.Store[account.Id] = account;
-        var sut = new WithdrawMoneyHandler(repo, uow, clock);
+        var locker = new StubSharedExclusiveLock();
+        var sut = new WithdrawMoneyHandler(repo, uow, locker, clock);
 
         var cmd = new WithdrawMoneyCommand(
             AccountId: account.Id,
@@ -60,6 +62,9 @@ public class WithdrawMoneyHandlerTests
         result.IsSuccess.Should().BeTrue();
         result.Value!.NewBalance.Should().Be(70m);
         uow.Calls.Should().Be(1);
+        // A withdrawal mutates the balance, so it takes an exclusive hold and releases it.
+        locker.AcquiredModes.Should().ContainSingle().Which.Should().Be(LockMode.Exclusive);
+        locker.Released.Should().Be(1);
     }
 
     [Fact]
@@ -70,7 +75,7 @@ public class WithdrawMoneyHandlerTests
         var uow = new CountingUow();
         var account = NewActiveAccount(clock, opening: 10m);
         repo.Store[account.Id] = account;
-        var sut = new WithdrawMoneyHandler(repo, uow, clock);
+        var sut = new WithdrawMoneyHandler(repo, uow, new StubSharedExclusiveLock(), clock);
 
         var cmd = new WithdrawMoneyCommand(
             AccountId: account.Id,

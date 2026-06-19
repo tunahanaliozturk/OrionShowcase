@@ -7,8 +7,10 @@ using Microsoft.Extensions.DependencyInjection;
 using Moongazing.OrionAudit;
 using Moongazing.OrionBeacon;
 using Moongazing.OrionBeacon.Observers;
+using Moongazing.OrionLock;
 using Moongazing.OrionLock.DependencyInjection;
 using Moongazing.OrionLock.Postgres;
+using Moongazing.OrionLock.Providers;
 using Moongazing.OrionPatch.DependencyInjection;
 using Moongazing.OrionPatch.EntityFrameworkCore.DependencyInjection;
 using Moongazing.OrionShowcase.Application.Abstractions;
@@ -21,6 +23,7 @@ using Moongazing.OrionShowcase.Infrastructure.Audit;
 using Moongazing.OrionShowcase.Infrastructure.HostedServices;
 using Moongazing.OrionShowcase.Infrastructure.Idempotency;
 using Moongazing.OrionShowcase.Infrastructure.Limits;
+using Moongazing.OrionShowcase.Infrastructure.Locking;
 using Moongazing.OrionShowcase.Infrastructure.Outbox;
 using Moongazing.OrionShowcase.Infrastructure.Persistence;
 using Moongazing.OrionShowcase.Infrastructure.Persistence.Repositories;
@@ -99,9 +102,24 @@ public static class InfrastructureServiceCollectionExtensions
         services.AddSingleton<Moongazing.Orion.Abstractions.Time.IOrionClock>(sp => sp.GetRequiredService<SystemClock>());
 
         // OrionLock with Postgres pg_try_advisory_lock backend. Registered as singleton by
-        // the package so TransferMoneyHandler's IDistributedLock dependency resolves
-        // without further plumbing.
+        // the package so the exclusive-only IDistributedLock dependency resolves without
+        // further plumbing. (Retained for any consumer that wants a cross-process exclusive lock.)
         services.AddOrionLock().UsePostgres(bankingConnectionString);
+
+        // OrionLock 0.4 reader-writer (shared/exclusive) lock over account money operations.
+        // Balance-mutating handlers (deposit, withdraw, transfer) take an EXCLUSIVE hold per
+        // account; the balance read (GetBalance) takes a SHARED hold, so reads run concurrently
+        // with each other but never alongside a mutation.
+        //
+        // OrionLock 0.4 ships shared/exclusive semantics for the in-memory backend only; the
+        // distributed providers (including the Postgres advisory-lock backend wired above) do not
+        // yet model shared holders, so the showcase supplies an in-memory ISharedExclusiveLockProvider.
+        // That is correct for this single-process sample. A production multi-node deployment would
+        // register a distributed reader-writer provider here instead; the handlers depend only on the
+        // ISharedExclusiveLock abstraction and need no change when that provider is swapped in.
+        services.AddSingleton<ISharedExclusiveLockProvider, InMemorySharedExclusiveLockProvider>();
+        services.AddSingleton<ISharedExclusiveLock>(sp =>
+            new SharedExclusiveLock(sp.GetRequiredService<ISharedExclusiveLockProvider>()));
 
         // OrionKey is a process-global static; configure once even if AddInfrastructure
         // is called from multiple hosts (tests do this).
