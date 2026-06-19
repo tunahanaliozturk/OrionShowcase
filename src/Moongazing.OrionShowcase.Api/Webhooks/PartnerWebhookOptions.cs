@@ -19,4 +19,20 @@ public sealed class PartnerWebhookOptions
     /// short-circuited by a stub HTTP handler so the app never fails on a missing partner.
     /// </summary>
     public bool UseStubTransport { get; set; }
+
+    /// <summary>
+    /// When <see langword="true"/>, an opt-in bounded in-memory dead-letter sink is registered so a
+    /// webhook delivery that exhausts its retry budget (or hits a fatal non-retryable response) is
+    /// captured with its final failure context instead of being lost. Defaults to
+    /// <see langword="true"/> for the showcase so dead-lettered deliveries are observable; the
+    /// OrionRelay default sink is a no-op. A durable sink fits production.
+    /// </summary>
+    public bool CaptureDeadLetters { get; set; } = true;
+
+    /// <summary>
+    /// The maximum number of dead-lettered deliveries retained by the in-memory sink before the
+    /// oldest is evicted. Bounds the working set during a prolonged partner outage. Ignored when
+    /// <see cref="CaptureDeadLetters"/> is <see langword="false"/>.
+    /// </summary>
+    public int DeadLetterCapacity { get; set; } = 256;
 }

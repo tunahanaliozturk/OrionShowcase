@@ -21,4 +21,7 @@ public static class BankingPermissions
 
     /// <summary>Move money between accounts.</summary>
     public const string AccountsTransfer = "accounts:transfer";
+
+    /// <summary>Administer API keys (rotate, bulk-revoke) and read delivery diagnostics.</summary>
+    public const string AdminKeysManage = "admin:keys";
 }

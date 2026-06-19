@@ -42,6 +42,11 @@ public static class OrionGrantExtensions
 
             // A read-only partner/service identity (also used by API-key callers).
             grant.AddRole("partner", BankingPermissions.CustomersRead, BankingPermissions.AccountsRead);
+
+            // An administrator who manages API keys (rotate, bulk-revoke) and reads delivery
+            // diagnostics. Distinct from teller/customer so key administration is not granted to
+            // self-service or back-office roles.
+            grant.AddRole("admin", BankingPermissions.AdminKeysManage);
         });
 
         return services;

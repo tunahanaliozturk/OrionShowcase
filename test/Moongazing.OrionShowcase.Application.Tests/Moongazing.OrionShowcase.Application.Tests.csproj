@@ -18,6 +18,11 @@
     <!-- Canonical in-memory reader-writer provider (writer-starvation-safe) exercised directly by the
          SharedExclusiveLock tests, including the waiting-writer-not-starved test. No Docker / Postgres. -->
     <PackageReference Include="OrionLock.Testing" />
+    <!-- Exercise the real OrionRelay dead-letter sink/dispatcher, OrionLedger key rotation/bulk-revoke,
+         and OrionBeacon lease store directly in unit tests. No Docker / Postgres. -->
+    <PackageReference Include="OrionRelay" />
+    <PackageReference Include="OrionLedger" />
+    <PackageReference Include="OrionBeacon" />
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\..\src\Moongazing.OrionShowcase.Application\Moongazing.OrionShowcase.Application.csproj" />

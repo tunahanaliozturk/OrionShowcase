@@ -10,6 +10,11 @@
     <NoWarn>$(NoWarn);CA1515;CA1305;CA1812;CA1848;CA1873</NoWarn>
   </PropertyGroup>
   <ItemGroup>
+    <!-- Expose internal endpoint handlers (e.g. WebhookDeadLettersEndpoint.Handle) to the integration
+         test assembly so the disabled-sink diagnostics path can be unit-tested without a host. -->
+    <InternalsVisibleTo Include="Moongazing.OrionShowcase.IntegrationTests" />
+  </ItemGroup>
+  <ItemGroup>
     <PackageReference Include="Microsoft.AspNetCore.Authentication.JwtBearer" />
     <PackageReference Include="Microsoft.IdentityModel.Tokens" />
     <PackageReference Include="System.IdentityModel.Tokens.Jwt" />

@@ -1,6 +1,7 @@
 namespace Moongazing.OrionShowcase.Api.Endpoints;
 
 using Moongazing.OrionShowcase.Api.Endpoints.Accounts;
+using Moongazing.OrionShowcase.Api.Endpoints.Admin;
 using Moongazing.OrionShowcase.Api.Endpoints.Auth;
 using Moongazing.OrionShowcase.Api.Endpoints.Customers;
 using Moongazing.OrionShowcase.Api.Endpoints.Partner;
@@ -22,6 +23,9 @@ public static class EndpointExtensions
         app.MapGetTransactions();
         app.MapAccountActivityStream();
         app.MapPartnerBalance();
+        app.MapPartnerRotateApiKey();
+        app.MapAdminRevokeSubjectKeys();
+        app.MapWebhookDeadLetters();
         return app;
     }
 }

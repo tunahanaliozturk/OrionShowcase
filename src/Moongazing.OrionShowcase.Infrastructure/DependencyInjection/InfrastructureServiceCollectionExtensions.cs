@@ -5,7 +5,9 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Moongazing.OrionAudit;
+using Microsoft.Extensions.DependencyInjection.Extensions;
 using Moongazing.OrionBeacon;
+using Moongazing.OrionBeacon.Leasing;
 using Moongazing.OrionBeacon.Observers;
 using Moongazing.OrionLock;
 using Moongazing.OrionLock.DependencyInjection;
@@ -67,6 +69,39 @@ public static class InfrastructureServiceCollectionExtensions
         // inside UseOrionPatch(sp). UseEntityFrameworkCore registers IOutbox as scoped
         // (bound to the resolved BankingDbContext via ConditionalWeakTable).
         services.AddOrionPatch().UseEntityFrameworkCore<BankingDbContext>();
+
+        // OrionPatch 0.3 dead-letter store + archival. UseEntityFrameworkCore registered the stock
+        // EfCoreOutboxStorage as IOutboxStorage, which dead-letters in-place (Status = DeadLettered)
+        // and has no archival. Replace it with the composite storage that ALSO implements
+        // IDeadLetterStore + IOutboxArchivalStore: because the dispatcher routes an exhausted row to a
+        // durable dead-letter store only when the injected IOutboxStorage implements IDeadLetterStore,
+        // the IOutboxStorage registration itself must be the composite. Registered scoped (bound to the
+        // scoped BankingDbContext) and re-exposed as the two capability interfaces for the archival
+        // host and diagnostics.
+        services.RemoveAll<Moongazing.OrionPatch.Abstractions.IOutboxStorage>();
+        services.AddScoped<EfCoreOutboxDeadLetterArchivalStorage>();
+        services.AddScoped<Moongazing.OrionPatch.Abstractions.IOutboxStorage>(
+            sp => sp.GetRequiredService<EfCoreOutboxDeadLetterArchivalStorage>());
+        services.AddScoped<Moongazing.OrionPatch.Abstractions.IDeadLetterStore>(
+            sp => sp.GetRequiredService<EfCoreOutboxDeadLetterArchivalStorage>());
+        services.AddScoped<Moongazing.OrionPatch.Abstractions.IOutboxArchivalStore>(
+            sp => sp.GetRequiredService<EfCoreOutboxDeadLetterArchivalStorage>());
+
+        // Drives archival: nothing in OrionPatch reaps processed rows, so the showcase supplies a host.
+        var retentionDays = int.TryParse(cfg["Outbox:RetentionDays"], NumberStyles.Integer, CultureInfo.InvariantCulture, out var rd) ? rd : 7;
+        var sweepMinutes = int.TryParse(cfg["Outbox:ArchiveSweepMinutes"], NumberStyles.Integer, CultureInfo.InvariantCulture, out var sm) ? sm : 60;
+
+        // Fail fast on misconfiguration. A negative retention would push the cutoff into the FUTURE and
+        // reap rows that are still inside their intended window; a zero/negative sweep interval makes
+        // PeriodicTimer throw (or, if it did not, would hot-loop the sweep). Validate the parsed bounds
+        // here so a bad appsettings value stops startup with a clear message instead of corrupting data
+        // or spinning a background loop. Retention may be zero (archive as soon as processed); the sweep
+        // interval must be strictly positive.
+        var archivalOptions = OutboxArchivalOptions.Create(
+            TimeSpan.FromDays(retentionDays),
+            TimeSpan.FromMinutes(sweepMinutes));
+        services.AddSingleton(archivalOptions);
+        services.AddHostedService<OutboxArchivalService>();
 
         // OrionAudit entity-level capture: writes a diff row per insert/update/delete on the
         // audited types into the OrionAudit_Log table within the same SaveChanges transaction.
@@ -155,6 +190,18 @@ public static class InfrastructureServiceCollectionExtensions
 
         // Logs leadership transitions; resolved by AddOrionBeacon's LeaderElector factory.
         services.AddSingleton<ILeadershipObserver, LoggingLeadershipObserver>();
+
+        // OrionBeacon 0.2 lease store with an injectable clock. AddOrionBeacon would otherwise
+        // TryAdd a default InMemoryLeaseStore activated through its parameterless constructor (which
+        // reads TimeProvider.System); registering the store explicitly here, BEFORE AddOrionBeacon,
+        // binds the lease clock to the DI-provided TimeProvider so lease acquisition/renewal/expiry
+        // read time from a single, testable source. The leasing and election calls already honor
+        // cooperative cancellation: ILeaseStore.TryAcquireOrRenewAsync/ReleaseAsync accept the
+        // stoppingToken threaded through LeaderElectionService and the elector.
+        services.TryAddSingleton(TimeProvider.System);
+        services.AddSingleton<ILeaseStore>(sp =>
+            new InMemoryLeaseStore(sp.GetRequiredService<TimeProvider>()));
+
         services.AddOrionBeacon(o =>
         {
             o.ResourceName = beaconResource;
