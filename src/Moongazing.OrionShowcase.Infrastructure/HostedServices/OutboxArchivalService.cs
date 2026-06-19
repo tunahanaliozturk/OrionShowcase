@@ -87,4 +87,19 @@ public sealed class OutboxArchivalOptions
 
     /// <summary>How often the archival sweep runs.</summary>
     public TimeSpan SweepInterval { get; set; } = TimeSpan.FromHours(1);
+
+    /// <summary>
+    /// Builds a validated instance, failing fast on misconfiguration. <paramref name="retention"/> must
+    /// be non-negative (a negative value would move the cutoff into the future and reap rows still
+    /// inside their window; zero means archive as soon as a row is processed). <paramref name="sweepInterval"/>
+    /// must be strictly positive (<see cref="System.Threading.PeriodicTimer"/> rejects a non-positive
+    /// period, and a zero/negative period would otherwise hot-loop the sweep).
+    /// </summary>
+    /// <exception cref="ArgumentOutOfRangeException">A bound is out of range.</exception>
+    public static OutboxArchivalOptions Create(TimeSpan retention, TimeSpan sweepInterval)
+    {
+        ArgumentOutOfRangeException.ThrowIfLessThan(retention, TimeSpan.Zero);
+        ArgumentOutOfRangeException.ThrowIfLessThanOrEqual(sweepInterval, TimeSpan.Zero);
+        return new OutboxArchivalOptions { Retention = retention, SweepInterval = sweepInterval };
+    }
 }

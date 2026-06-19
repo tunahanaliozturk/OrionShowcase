@@ -63,21 +63,14 @@ public sealed class EfCoreOutboxDeadLetterArchivalStorage : IOutboxStorage, IDea
     /// <inheritdoc />
     public async Task<bool> DeadLetterAsync(Guid rowId, DeadLetterContext context, CancellationToken cancellationToken = default)
     {
-        // Idempotent on row id: if the message is already in the dead-letter store, this is a no-op
-        // even if the dispatcher's terminal path runs twice (lease expiry, crash-replay). Still ensure
-        // the source row is gone, in case a prior attempt crashed between the insert and the delete.
-        var alreadyDeadLettered = await _db.Set<OutboxDeadLetterEntity>()
-            .AsNoTracking()
-            .AnyAsync(x => x.Id == rowId, cancellationToken)
-            .ConfigureAwait(false);
-        if (alreadyDeadLettered)
-        {
-            await _db.Set<OutboxRow>()
-                .Where(x => x.Id == rowId)
-                .ExecuteDeleteAsync(cancellationToken)
-                .ConfigureAwait(false);
-            return false;
-        }
+        // The dead-letter table's id is its primary key, copied verbatim from the source outbox row,
+        // so the PK itself is the per-message uniqueness guard: at most one dead-letter row can exist
+        // per message id. We rely on that constraint instead of a non-atomic pre-check. A pre-check
+        // (SELECT ... ANY then INSERT) is a TOCTOU race: under a lease-expiry/crash-replay two terminal
+        // paths can both observe "not yet dead-lettered" and both attempt the insert, and the second
+        // throws. Here the insert is attempted optimistically and a unique/PK violation is treated as
+        // "already dead-lettered by a concurrent/replayed terminal path" (a no-op success), which is the
+        // idempotent, conflict-tolerant behaviour the terminal path requires.
 
         var source = await _db.Set<OutboxRow>()
             .AsNoTracking()
@@ -85,7 +78,8 @@ public sealed class EfCoreOutboxDeadLetterArchivalStorage : IOutboxStorage, IDea
             .ConfigureAwait(false);
         if (source is null)
         {
-            // Source row no longer exists: nothing to move.
+            // Source row no longer exists: either it was never claimed or a prior terminal pass already
+            // moved it. Nothing to move; report no move performed.
             return false;
         }
 
@@ -103,20 +97,36 @@ public sealed class EfCoreOutboxDeadLetterArchivalStorage : IOutboxStorage, IDea
             DeadLetteredAtUtc = context.DeadLetteredAtUtc,
         };
 
-        // Move atomically: append to the dead-letter table and remove the source row from the hot
-        // outbox in one transaction so the active outbox is never polluted with terminal rows and a
-        // crash cannot leave the message in both tables or neither.
-        await ExecuteInTransactionAsync(async ct =>
+        try
         {
-            await _db.Set<OutboxDeadLetterEntity>().AddAsync(entity, ct).ConfigureAwait(false);
-            await _db.SaveChangesAsync(ct).ConfigureAwait(false);
+            // Move atomically: append to the dead-letter table and remove the source row from the hot
+            // outbox in one transaction so the active outbox is never polluted with terminal rows and a
+            // crash cannot leave the message in both tables or neither.
+            await ExecuteInTransactionAsync(async ct =>
+            {
+                await _db.Set<OutboxDeadLetterEntity>().AddAsync(entity, ct).ConfigureAwait(false);
+                await _db.SaveChangesAsync(ct).ConfigureAwait(false);
+                await _db.Set<OutboxRow>()
+                    .Where(x => x.Id == rowId)
+                    .ExecuteDeleteAsync(ct)
+                    .ConfigureAwait(false);
+            }, cancellationToken).ConfigureAwait(false);
+
+            return true;
+        }
+        catch (DbUpdateException)
+        {
+            // A concurrent/replayed terminal path already inserted the dead-letter row for this id; the
+            // PK rejected our insert. Treat it as already dead-lettered (idempotent no-op success) and
+            // still ensure the source row is removed from the hot outbox, in case the winning path
+            // crashed between its insert and its delete.
+            _db.ChangeTracker.Clear();
             await _db.Set<OutboxRow>()
                 .Where(x => x.Id == rowId)
-                .ExecuteDeleteAsync(ct)
+                .ExecuteDeleteAsync(cancellationToken)
                 .ConfigureAwait(false);
-        }, cancellationToken).ConfigureAwait(false);
-
-        return true;
+            return false;
+        }
     }
 
     /// <inheritdoc />
@@ -184,6 +194,13 @@ public sealed class EfCoreOutboxDeadLetterArchivalStorage : IOutboxStorage, IDea
 
         // Move atomically: append the newly archived rows and remove the reaped processed rows from
         // the hot outbox in one transaction so a crash cannot drop a row from both tables.
+        //
+        // The DELETE is constrained to EXACTLY the snapshotted ids (id IN dueIds), never the broad
+        // time predicate. Re-evaluating the time predicate here would also match rows that became due
+        // AFTER the SELECT (dispatched between the snapshot and this delete) - those are NOT in the
+        // archive yet, so deleting them would lose data. Every id in dueIds is provably archived by
+        // this point (either already present, or appended via toAdd above), so deleting precisely those
+        // ids removes only rows we have durably preserved.
         var moved = 0;
         await ExecuteInTransactionAsync(async ct =>
         {
@@ -194,9 +211,7 @@ public sealed class EfCoreOutboxDeadLetterArchivalStorage : IOutboxStorage, IDea
             }
 
             moved = await _db.Set<OutboxRow>()
-                .Where(x => x.Status == OutboxStatus.Processed
-                    && x.ProcessedAtUtc != null
-                    && x.ProcessedAtUtc <= cutoff)
+                .Where(x => dueIds.Contains(x.Id))
                 .ExecuteDeleteAsync(ct)
                 .ConfigureAwait(false);
         }, cancellationToken).ConfigureAwait(false);

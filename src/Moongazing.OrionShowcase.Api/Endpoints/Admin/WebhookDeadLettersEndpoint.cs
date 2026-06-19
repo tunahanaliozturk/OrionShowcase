@@ -4,6 +4,7 @@ using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.AspNetCore.Routing;
+using Microsoft.Extensions.DependencyInjection;
 using Moongazing.OrionRelay.Delivery;
 using Moongazing.OrionShowcase.Api.Authorization;
 using Moongazing.OrionShowcase.Api.RateLimiting;
@@ -30,10 +31,15 @@ internal static class WebhookDeadLettersEndpoint
            .Produces<IReadOnlyList<WebhookDeadLetterDto>>(200);
     }
 
-    private static IResult Handle(InMemoryDeadLetterSink? sink)
+    internal static IResult Handle(IServiceProvider services)
     {
+        // The in-memory sink is only registered when Relay:CaptureDeadLetters is enabled
+        // (see AddPartnerWebhooks). Resolve it OPTIONALLY so this diagnostics endpoint degrades
+        // gracefully when capture is disabled, rather than failing to resolve a required service.
+        var sink = services.GetService<InMemoryDeadLetterSink>();
         if (sink is null)
         {
+            // Capture disabled: no in-memory sink to read. Report an empty, well-formed list.
             return Results.Ok(Array.Empty<WebhookDeadLetterDto>());
         }
 

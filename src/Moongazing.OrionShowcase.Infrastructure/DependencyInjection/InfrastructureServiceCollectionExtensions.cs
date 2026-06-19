@@ -90,11 +90,17 @@ public static class InfrastructureServiceCollectionExtensions
         // Drives archival: nothing in OrionPatch reaps processed rows, so the showcase supplies a host.
         var retentionDays = int.TryParse(cfg["Outbox:RetentionDays"], NumberStyles.Integer, CultureInfo.InvariantCulture, out var rd) ? rd : 7;
         var sweepMinutes = int.TryParse(cfg["Outbox:ArchiveSweepMinutes"], NumberStyles.Integer, CultureInfo.InvariantCulture, out var sm) ? sm : 60;
-        services.AddSingleton(new OutboxArchivalOptions
-        {
-            Retention = TimeSpan.FromDays(retentionDays),
-            SweepInterval = TimeSpan.FromMinutes(sweepMinutes),
-        });
+
+        // Fail fast on misconfiguration. A negative retention would push the cutoff into the FUTURE and
+        // reap rows that are still inside their intended window; a zero/negative sweep interval makes
+        // PeriodicTimer throw (or, if it did not, would hot-loop the sweep). Validate the parsed bounds
+        // here so a bad appsettings value stops startup with a clear message instead of corrupting data
+        // or spinning a background loop. Retention may be zero (archive as soon as processed); the sweep
+        // interval must be strictly positive.
+        var archivalOptions = OutboxArchivalOptions.Create(
+            TimeSpan.FromDays(retentionDays),
+            TimeSpan.FromMinutes(sweepMinutes));
+        services.AddSingleton(archivalOptions);
         services.AddHostedService<OutboxArchivalService>();
 
         // OrionAudit entity-level capture: writes a diff row per insert/update/delete on the
