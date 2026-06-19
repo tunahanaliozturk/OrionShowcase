@@ -46,6 +46,14 @@ OrionShowcase is a banking sample written the way a senior .NET team would write
 
 There is nothing in this repo that you could not have written yourself. The point is that the integrated story is much harder to assemble than any single package looks. Seeing one transfer request fan out through OrionGuard's validation, OrionKey's idempotency, OrionLock's distributed locks, OrionAudit's entity-diff capture, OrionPatch's outbox, and OrionVault's PII decryption is the whole pitch.
 
+### Maturity-wave showcases
+
+Three capabilities from the maturity-wave package releases (OrionGuard 6.6, OrionOnce 0.2, OrionVault 0.3), each in a real banking scenario:
+
+- Asynchronous validation (OrionGuard 6.6). Customer registration runs a national-id uniqueness check inside the async validation pipeline (`Validate.For(command).MustAsync(...).ToResultAsync(ct)`). The I/O-bound rule executes in the same failure-aggregation pass as the structural rules and flows back through the existing `ValidationBehavior`. See [`RegisterCustomerUniquenessValidator.cs`](src/Moongazing.OrionShowcase.Application/Customers/Commands/RegisterCustomer/RegisterCustomerUniquenessValidator.cs).
+- Idempotent money movement (OrionOnce 0.2). The transfer endpoint runs the transfer through an `IdempotentExecutor` keyed on the `Idempotency-Key` request header. A retried POST with the same key replays the captured typed result (same transfer id, same balance) instead of moving money a second time. The in-memory store is used for the sample; a durable store fits production. See [`TransferEndpoint.cs`](src/Moongazing.OrionShowcase.Api/Endpoints/Accounts/TransferEndpoint.cs) and [`OrionOnceTransferExtensions.cs`](src/Moongazing.OrionShowcase.Api/Idempotency/OrionOnceTransferExtensions.cs).
+- Searchable encryption via blind index (OrionVault 0.3). The customer national id is stored as randomized ciphertext and alongside it a deterministic HMAC blind index (`national_id_index`). Equality lookups (the uniqueness check, find-by-national-id) run as an indexed equality seek over the blind index without decrypting any row. Uniqueness is enforced at the database level by a UNIQUE FILTERED index on the blind-index column (`unique` where `national_id_index IS NOT NULL`), so a race between two concurrent registrations cannot insert the same national id even if both pass the async validator. The blind-index column is nullable because it was added to an already-populated table: pre-existing customers keep a null blind index (and are excluded from the unique constraint by the filter) until a production deployment backfills them by recomputing the blind index for each existing national id. The index key is a demo-only value from configuration, distinct from the encryption key. See [`CustomerConfiguration.cs`](src/Moongazing.OrionShowcase.Infrastructure/Persistence/Configurations/CustomerConfiguration.cs) and [`OrionVaultNationalIdIndexer.cs`](src/Moongazing.OrionShowcase.Infrastructure/Vault/OrionVaultNationalIdIndexer.cs).
+
 ## Five-minute experience
 
 ```bash
@@ -99,7 +107,7 @@ flowchart TB
 Tests:
 
 - `OrionShowcase.Domain.Tests` (30 tests, xunit + FluentAssertions, no infrastructure)
-- `OrionShowcase.Application.Tests` (21 tests, in-memory fakes for repositories/locks/idempotency)
+- `OrionShowcase.Application.Tests` (33 tests, in-memory fakes for repositories/locks/idempotency; covers async uniqueness validation, OrionOnce idempotent execution, and the OrionVault blind index)
 - `OrionShowcase.IntegrationTests` (Testcontainers Postgres, real DI graph, end-to-end register/open/transfer + PII-at-rest verification)
 
 ## Transfer flow (one request, six packages)

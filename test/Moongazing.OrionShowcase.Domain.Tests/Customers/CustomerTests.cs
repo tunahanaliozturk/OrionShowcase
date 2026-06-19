@@ -13,15 +13,18 @@ public class CustomerTests
     [Fact]
     public void Register_raises_CustomerRegistered_event_and_sets_properties()
     {
+        var blindIndex = new byte[] { 1, 2, 3, 4 };
         var c = Customer.Register(
             "Ali Veli",
             new Tckn("10000000146"),
+            blindIndex,
             "ali@example.com",
             "+905551234567",
             new FixedClock());
 
         c.FullName.Should().Be("Ali Veli");
         c.NationalId.Value.Should().Be("10000000146");
+        c.NationalIdIndex.Should().Equal(blindIndex);
         c.Email.Should().Be("ali@example.com");
         c.Phone.Should().Be("+905551234567");
         c.DomainEvents.Should().ContainSingle(e => e is CustomerRegistered);
@@ -30,7 +33,7 @@ public class CustomerTests
     [Fact]
     public void Register_with_blank_name_throws()
     {
-        var act = () => Customer.Register(" ", new Tckn("10000000146"), "ali@x.com", "+905551234567", new FixedClock());
+        var act = () => Customer.Register(" ", new Tckn("10000000146"), new byte[] { 1 }, "ali@x.com", "+905551234567", new FixedClock());
         act.Should().Throw<ArgumentException>();
     }
 }

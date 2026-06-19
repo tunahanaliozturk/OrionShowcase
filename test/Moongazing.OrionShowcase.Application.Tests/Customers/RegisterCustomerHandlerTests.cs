@@ -1,6 +1,8 @@
 namespace Moongazing.OrionShowcase.Application.Tests.Customers;
 
+using System.Text;
 using FluentAssertions;
+using Moongazing.OrionShowcase.Application.Abstractions;
 using Moongazing.OrionShowcase.Application.Customers.Commands.RegisterCustomer;
 using Moongazing.OrionShowcase.Domain.Abstractions;
 using Moongazing.OrionShowcase.Domain.Customers;
@@ -27,6 +29,12 @@ public class RegisterCustomerHandlerTests
 
         public Task<Customer?> GetAsync(CustomerId id, CancellationToken cancellationToken)
             => Task.FromResult(Store.GetValueOrDefault(id));
+
+        public Task<bool> ExistsByNationalIdAsync(Tckn nationalId, CancellationToken cancellationToken)
+            => Task.FromResult(Store.Values.Any(c => c.NationalId.Value == nationalId.Value));
+
+        public Task<Customer?> FindByNationalIdAsync(Tckn nationalId, CancellationToken cancellationToken)
+            => Task.FromResult(Store.Values.FirstOrDefault(c => c.NationalId.Value == nationalId.Value));
     }
 
     private sealed class CountingUow : IUnitOfWork
@@ -39,12 +47,20 @@ public class RegisterCustomerHandlerTests
         }
     }
 
+    // Deterministic stand-in for the OrionVault blind index: equal national ids yield equal bytes.
+    private sealed class FakeIndexer : INationalIdIndexer
+    {
+        public byte[] Compute(Tckn nationalId) => Encoding.UTF8.GetBytes("idx:" + nationalId.Value);
+
+        public IReadOnlyList<byte[]> ComputeAllVersions(Tckn nationalId) => new[] { Compute(nationalId) };
+    }
+
     [Fact]
     public async Task Registers_customer_and_returns_new_id()
     {
         var repo = new FakeCustomerRepo();
         var uow = new CountingUow();
-        var sut = new RegisterCustomerHandler(repo, uow, new FixedClock());
+        var sut = new RegisterCustomerHandler(repo, uow, new FixedClock(), new FakeIndexer());
 
         var cmd = new RegisterCustomerCommand(
             FullName: "Ada Lovelace",
@@ -66,7 +82,7 @@ public class RegisterCustomerHandlerTests
     {
         var repo = new FakeCustomerRepo();
         var uow = new CountingUow();
-        var sut = new RegisterCustomerHandler(repo, uow, new FixedClock());
+        var sut = new RegisterCustomerHandler(repo, uow, new FixedClock(), new FakeIndexer());
 
         var cmd = new RegisterCustomerCommand(
             FullName: "Grace Hopper",

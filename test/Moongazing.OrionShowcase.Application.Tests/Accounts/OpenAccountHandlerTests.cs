@@ -47,6 +47,12 @@ public class OpenAccountHandlerTests
 
         public Task<Customer?> GetAsync(CustomerId id, CancellationToken cancellationToken)
             => Task.FromResult(Store.GetValueOrDefault(id));
+
+        public Task<bool> ExistsByNationalIdAsync(Tckn nationalId, CancellationToken cancellationToken)
+            => Task.FromResult(Store.Values.Any(c => c.NationalId.Value == nationalId.Value));
+
+        public Task<Customer?> FindByNationalIdAsync(Tckn nationalId, CancellationToken cancellationToken)
+            => Task.FromResult(Store.Values.FirstOrDefault(c => c.NationalId.Value == nationalId.Value));
     }
 
     private sealed class CountingUow : IUnitOfWork
@@ -78,7 +84,7 @@ public class OpenAccountHandlerTests
 
         // Seed the customer so the saga's validate-customer step passes.
         customers.Store[existingCustomer] = Customer.Register(
-            "Test Customer", new Tckn("10000000146"), "test@example.com", "+905551234567", clock);
+            "Test Customer", new Tckn("10000000146"), new byte[] { 1, 2, 3 }, "test@example.com", "+905551234567", clock);
 
         var saga = new AccountOpeningSaga(
             accounts, customers, uow, limits, clock, NullLogger<AccountOpeningSaga>.Instance);
