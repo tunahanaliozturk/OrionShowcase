@@ -25,6 +25,7 @@ using Moongazing.OrionShowcase.Infrastructure.Outbox;
 using Moongazing.OrionShowcase.Infrastructure.Persistence;
 using Moongazing.OrionShowcase.Infrastructure.Persistence.Repositories;
 using Moongazing.OrionShowcase.Infrastructure.Time;
+using Moongazing.OrionShowcase.Infrastructure.Vault;
 using Moongazing.OrionVault.DependencyInjection;
 using Moongazing.OrionVault.EntityFrameworkCore.DependencyInjection;
 
@@ -45,7 +46,18 @@ public static class InfrastructureServiceCollectionExtensions
         {
             o.UseStaticKeys(k => k.Add(keyId: 1, base64Key: cfg["Vault:Key1"]!));
             o.ActiveKeyId = 1;
+
+            // Searchable encryption: register the HMAC key set backing the deterministic blind
+            // index over the customer national id. The index key MUST be distinct from the
+            // encryption key above (different secret material) so the blind index does not weaken
+            // the randomized ciphertext. Opting in here makes IBlindIndexProvider resolvable.
+            o.UseBlindIndex(k => k.Add(version: 1, base64Key: cfg["Vault:BlindIndexKey1"]!));
+            o.ActiveBlindIndexVersion = 1;
         }).UseEntityFrameworkCore<BankingDbContext>();
+
+        // Application port over the OrionVault blind index, consumed by the register-customer
+        // handler (to stamp the index) and the customer repository (to look up by it).
+        services.AddSingleton<INationalIdIndexer, OrionVaultNationalIdIndexer>();
 
         // OrionPatch core + EF Core storage backend bound to BankingDbContext.
         // Must run before AddDbContext so OrionPatchSaveChangesInterceptor is resolvable

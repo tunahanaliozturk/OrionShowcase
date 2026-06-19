@@ -1,5 +1,6 @@
 namespace Moongazing.OrionShowcase.Domain.Customers;
 
+using System.Diagnostics.CodeAnalysis;
 using Moongazing.OrionGuard.Core;
 using Moongazing.OrionShowcase.Domain.Abstractions;
 using Moongazing.OrionShowcase.Domain.ValueObjects;
@@ -8,18 +9,39 @@ public sealed class Customer : AggregateRoot<CustomerId>
 {
     public string FullName { get; private set; } = null!;
     public Tckn NationalId { get; private set; } = null!;
+
+    /// <summary>
+    /// Deterministic OrionVault blind index over <see cref="NationalId"/>. The national id itself
+    /// is stored as randomized ciphertext (no two encryptions match), which makes an equality
+    /// lookup impossible against the encrypted column. This searchable HMAC digest lets an exact
+    /// lookup ("does this national id already exist?") run as a plain indexed equality predicate
+    /// without ever decrypting a row. Equal national ids always produce byte-identical bytes.
+    /// </summary>
+    [SuppressMessage(
+        "Performance",
+        "CA1819:Properties should not return arrays",
+        Justification = "Maps to a Postgres bytea column; EF Core materialises and persists the blind index as a byte[].")]
+    public byte[] NationalIdIndex { get; private set; } = Array.Empty<byte>();
+
     public string Email { get; private set; } = null!;
     public string Phone { get; private set; } = null!;
     public DateTimeOffset RegisteredAt { get; private set; }
 
     private Customer() { }   // EF Core ctor
 
-    public static Customer Register(string fullName, Tckn nationalId, string email, string phone, IClock clock)
+    public static Customer Register(
+        string fullName,
+        Tckn nationalId,
+        byte[] nationalIdIndex,
+        string email,
+        string phone,
+        IClock clock)
     {
         // OrionGuard's Ensure shorthand throws standard ArgumentException / ArgumentNullException
         // so existing callers and tests keep working without behavioural change.
         Ensure.NotNullOrWhiteSpace(fullName);
         Ensure.NotNull(nationalId);
+        Ensure.NotNull(nationalIdIndex);
         Ensure.NotNullOrWhiteSpace(email);
         Ensure.NotNullOrWhiteSpace(phone);
         Ensure.NotNull(clock);
@@ -38,6 +60,7 @@ public sealed class Customer : AggregateRoot<CustomerId>
             Id = id,
             FullName = fullName.Trim(),
             NationalId = nationalId,
+            NationalIdIndex = nationalIdIndex,
             Email = email.Trim(),
             Phone = phone.Trim(),
             RegisteredAt = clock.UtcNow

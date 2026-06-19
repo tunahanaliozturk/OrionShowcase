@@ -25,7 +25,16 @@ public sealed class CustomerConfiguration : IEntityTypeConfiguration<Customer>
         builder.Property(c => c.NationalId)
             .HasConversion(v => v.Value, s => new Tckn(s))
             .HasColumnName("national_id")
-            .HasAnnotation(EncryptedAnnotation, true);   // OrionVault: stored as bytea
+            .HasAnnotation(EncryptedAnnotation, true);   // OrionVault: randomized ciphertext (Base64 text)
+
+        // OrionVault deterministic blind index over the national id. Stored as raw bytea (NOT
+        // encrypted): the value is already a keyed HMAC digest. Indexed so the uniqueness check
+        // and "find by national id" run as a single equality seek without decrypting any row.
+        builder.Property(c => c.NationalIdIndex)
+            .HasColumnName("national_id_index")
+            .HasColumnType("bytea")
+            .IsRequired();
+        builder.HasIndex(c => c.NationalIdIndex).HasDatabaseName("ix_customers_national_id_index");
 
         builder.Property(c => c.Email).HasColumnName("email").HasAnnotation(EncryptedAnnotation, true);
         builder.Property(c => c.Phone).HasColumnName("phone").HasAnnotation(EncryptedAnnotation, true);

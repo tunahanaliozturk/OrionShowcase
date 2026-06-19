@@ -3,12 +3,12 @@ using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.EntityFrameworkCore;
 using Moongazing.OrionGuard.AspNetCore.Extensions;
 using Moongazing.OrionLens;
-using Moongazing.OrionOnce;
 using Moongazing.OrionShowcase.Api.ApiKeys;
 using Moongazing.OrionShowcase.Api.Authentication;
 using Moongazing.OrionShowcase.Api.Authorization;
 using Moongazing.OrionShowcase.Api.Endpoints;
 using Moongazing.OrionShowcase.Api.Health;
+using Moongazing.OrionShowcase.Api.Idempotency;
 using Moongazing.OrionShowcase.Api.Observability;
 using Moongazing.OrionShowcase.Api.RateLimiting;
 using Moongazing.OrionShowcase.Api.Redaction;
@@ -41,10 +41,12 @@ builder.Services
     .AddBankingAuthorization()
     // OrionLedger: API-key issuance/verification for partner endpoints (in-memory store).
     .AddBankingApiKeys()
-    // OrionOnce: HTTP idempotency for mutating requests honoring the Idempotency-Key header. The
-    // default guarded set already covers POST (idempotent GET/HEAD/OPTIONS are excluded); a key is
-    // optional, so requests without an Idempotency-Key pass through unchanged.
-    .AddOrionOnce()
+    // OrionOnce: explicit idempotent execution of money movements. The transfer endpoint runs the
+    // transfer through an IdempotentExecutor keyed on the Idempotency-Key header and replays the
+    // captured result on a retry with the same key, so a double-submitted transfer is applied once.
+    // This is the targeted, result-replaying alternative to the generic HTTP middleware: it captures
+    // the typed transfer response (including the generated transfer id) rather than a raw HTTP body.
+    .AddTransferIdempotency()
     // OrionRelay: signed transfer.completed webhooks to a partner endpoint (stub transport when unset).
     .AddPartnerWebhooks(builder.Configuration)
     // OrionStream: SSE hub backing GET /api/accounts/{id}/activity/stream.
@@ -86,11 +88,9 @@ app.UseAuthentication();
 app.UseAuthorization();
 app.UseRateLimiter();
 
-// OrionOnce idempotency: guards mutating POSTs that carry an Idempotency-Key. Placed after auth
-// so only authenticated, rate-limited requests reach the store, and before the endpoints whose
-// retries we deduplicate (notably the transfer endpoint).
-app.UseOrionOnce();
-
+// OrionOnce idempotency is applied at the transfer endpoint via the IdempotentExecutor (see
+// AddTransferIdempotency / TransferEndpoint) rather than as generic HTTP middleware, so the
+// captured/replayed value is the typed transfer result, not an opaque response body.
 app.MapBankingEndpoints();
 app.MapHealthChecks("/health/live");
 app.MapHealthChecks("/health/ready", new HealthCheckOptions { Predicate = h => h.Tags.Contains("ready") });

@@ -11,6 +11,10 @@
     <PackageReference Include="xunit.runner.visualstudio" />
     <PackageReference Include="coverlet.collector" />
     <PackageReference Include="FluentAssertions" />
+    <!-- Exercise the real OrionOnce executor and OrionVault blind-index provider in unit tests
+         (no Docker / Postgres needed). Versions come from Directory.Packages.props. -->
+    <PackageReference Include="OrionOnce" />
+    <PackageReference Include="OrionVault" />
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\..\src\Moongazing.OrionShowcase.Application\Moongazing.OrionShowcase.Application.csproj" />

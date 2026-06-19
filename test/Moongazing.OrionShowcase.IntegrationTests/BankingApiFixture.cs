@@ -27,6 +27,8 @@ public sealed class BankingApiFixture : WebApplicationFactory<Program>, IAsyncLi
             {
                 ["ConnectionStrings:Banking"] = PostgresConnectionString,
                 ["Vault:Key1"] = "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=",
+                // Demo-only HMAC key for the national-id blind index (distinct from the encryption key).
+                ["Vault:BlindIndexKey1"] = "QkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkE=",
                 ["Jwt:Issuer"] = "https://orionshowcase.local",
                 ["Jwt:Audience"] = "orionshowcase-api",
                 ["Jwt:SigningKey"] = "demo-signing-key-min-32-chars-for-hs256-algorithm",
