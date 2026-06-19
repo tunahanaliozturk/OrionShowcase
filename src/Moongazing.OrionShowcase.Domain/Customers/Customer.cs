@@ -16,12 +16,18 @@ public sealed class Customer : AggregateRoot<CustomerId>
     /// lookup impossible against the encrypted column. This searchable HMAC digest lets an exact
     /// lookup ("does this national id already exist?") run as a plain indexed equality predicate
     /// without ever decrypting a row. Equal national ids always produce byte-identical bytes.
+    /// <para>
+    /// Nullable on purpose: the column was added to an already-populated table, so existing rows
+    /// carry a null blind index until a production backfill recomputes it. A UNIQUE FILTERED index
+    /// (unique only where the value IS NOT NULL) lets those legacy null rows coexist while still
+    /// de-duplicating every new insert at the database level. New registrations always set it.
+    /// </para>
     /// </summary>
     [SuppressMessage(
         "Performance",
         "CA1819:Properties should not return arrays",
         Justification = "Maps to a Postgres bytea column; EF Core materialises and persists the blind index as a byte[].")]
-    public byte[] NationalIdIndex { get; private set; } = Array.Empty<byte>();
+    public byte[]? NationalIdIndex { get; private set; }
 
     public string Email { get; private set; } = null!;
     public string Phone { get; private set; } = null!;

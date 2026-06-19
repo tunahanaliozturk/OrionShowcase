@@ -32,7 +32,13 @@ public class NationalIdUniquenessTests : IClassFixture<BankingApiFixture>
         var client = _fx.CreateClient();
 
         var loginRes = await client.PostAsJsonAsync("/api/auth/login", new { username = "demo", password = "demo" });
-        var token = (await loginRes.Content.ReadFromJsonAsync<TokenBody>())!.AccessToken;
+        // Assert the login succeeded before dereferencing the body, so a failed login surfaces as a
+        // clear assertion failure instead of a NullReferenceException on the deserialized token.
+        loginRes.StatusCode.Should().Be(HttpStatusCode.OK);
+        var tokenBody = await loginRes.Content.ReadFromJsonAsync<TokenBody>();
+        tokenBody.Should().NotBeNull();
+        var token = tokenBody!.AccessToken;
+        token.Should().NotBeNullOrEmpty();
         client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", token);
 
         var firstSuffix = Guid.NewGuid().ToString("N")[..8];

@@ -26,12 +26,16 @@ namespace Moongazing.OrionShowcase.Infrastructure.Persistence.Migrations
                 maxLength: 512,
                 nullable: true);
 
+            // Added to an already-populated table, so the column is NULLABLE: existing customers
+            // keep a null blind index until a production deployment backfills them by recomputing
+            // the OrionVault blind index for each pre-existing national id. The unique FILTERED
+            // index below excludes those null rows, so the missing backfill is safe and uniqueness
+            // is still enforced for every newly registered customer.
             migrationBuilder.AddColumn<byte[]>(
                 name: "national_id_index",
                 table: "customers",
                 type: "bytea",
-                nullable: false,
-                defaultValue: new byte[0]);
+                nullable: true);
 
             migrationBuilder.CreateTable(
                 name: "OrionPatch_Inbox",
@@ -46,10 +50,16 @@ namespace Moongazing.OrionShowcase.Infrastructure.Persistence.Migrations
                     table.PrimaryKey("PK_OrionPatch_Inbox", x => new { x.MessageId, x.Consumer });
                 });
 
+            // UNIQUE FILTERED index: enforces national-id uniqueness at the database level so two
+            // concurrent registrations cannot both insert the same national id even if they race
+            // past the async uniqueness validator. The "IS NOT NULL" filter keeps legacy rows with
+            // a null (not-yet-backfilled) blind index out of the uniqueness constraint.
             migrationBuilder.CreateIndex(
                 name: "ix_customers_national_id_index",
                 table: "customers",
-                column: "national_id_index");
+                column: "national_id_index",
+                unique: true,
+                filter: "national_id_index IS NOT NULL");
         }
 
         /// <inheritdoc />

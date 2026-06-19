@@ -363,7 +363,6 @@ namespace Moongazing.OrionShowcase.Infrastructure.Persistence.Migrations
                         .HasAnnotation("OrionVault:Encrypted", true);
 
                     b.Property<byte[]>("NationalIdIndex")
-                        .IsRequired()
                         .HasColumnType("bytea")
                         .HasColumnName("national_id_index");
 
@@ -380,7 +379,9 @@ namespace Moongazing.OrionShowcase.Infrastructure.Persistence.Migrations
                     b.HasKey("Id");
 
                     b.HasIndex("NationalIdIndex")
-                        .HasDatabaseName("ix_customers_national_id_index");
+                        .IsUnique()
+                        .HasDatabaseName("ix_customers_national_id_index")
+                        .HasFilter("national_id_index IS NOT NULL");
 
                     b.ToTable("customers", (string)null);
                 });

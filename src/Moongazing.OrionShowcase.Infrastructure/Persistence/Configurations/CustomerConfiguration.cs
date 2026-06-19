@@ -30,11 +30,23 @@ public sealed class CustomerConfiguration : IEntityTypeConfiguration<Customer>
         // OrionVault deterministic blind index over the national id. Stored as raw bytea (NOT
         // encrypted): the value is already a keyed HMAC digest. Indexed so the uniqueness check
         // and "find by national id" run as a single equality seek without decrypting any row.
+        //
+        // Nullable: the column was introduced on an already-populated table, so pre-existing rows
+        // keep a null blind index until a production backfill recomputes it. New registrations
+        // always set it.
         builder.Property(c => c.NationalIdIndex)
             .HasColumnName("national_id_index")
-            .HasColumnType("bytea")
-            .IsRequired();
-        builder.HasIndex(c => c.NationalIdIndex).HasDatabaseName("ix_customers_national_id_index");
+            .HasColumnType("bytea");
+
+        // UNIQUE FILTERED index: enforces national-id uniqueness at the database level so a race
+        // between two concurrent registrations cannot insert two customers with the same national
+        // id even if both pass the async uniqueness validator. The "national_id_index IS NOT NULL"
+        // filter excludes legacy null rows from the uniqueness constraint, so the not-yet-backfilled
+        // existing customers do not collide with each other.
+        builder.HasIndex(c => c.NationalIdIndex)
+            .HasDatabaseName("ix_customers_national_id_index")
+            .IsUnique()
+            .HasFilter("national_id_index IS NOT NULL");
 
         builder.Property(c => c.Email).HasColumnName("email").HasAnnotation(EncryptedAnnotation, true);
         builder.Property(c => c.Phone).HasColumnName("phone").HasAnnotation(EncryptedAnnotation, true);
