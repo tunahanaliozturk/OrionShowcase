@@ -23,7 +23,11 @@ public sealed class GetAccountBalanceHandler : IRequestHandler<GetAccountBalance
 
         // A balance read takes a SHARED (reader) hold on the account: any number of concurrent reads
         // coexist, but the read is excluded while a mutation holds the account exclusively, so a
-        // reader never observes a half-applied deposit/withdraw/transfer.
+        // reader never observes a half-applied deposit/withdraw/transfer. This reader-writer lock is
+        // in-memory and therefore single-process/sample-only - it coordinates reads against mutations
+        // WITHIN this process. Cross-replica mutation safety is provided separately by the distributed
+        // Postgres lock the mutation handlers take; a distributed reader-writer provider would extend
+        // this read coordination across replicas in production.
         var handle = await _locker
             .AcquireSharedAsync(AccountLock.KeyFor(request.AccountId), AccountLock.Options, cancellationToken)
             .ConfigureAwait(false);

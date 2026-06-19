@@ -15,12 +15,15 @@
          (no Docker / Postgres needed). Versions come from Directory.Packages.props. -->
     <PackageReference Include="OrionOnce" />
     <PackageReference Include="OrionVault" />
+    <!-- Canonical in-memory reader-writer provider (writer-starvation-safe) exercised directly by the
+         SharedExclusiveLock tests, including the waiting-writer-not-starved test. No Docker / Postgres. -->
+    <PackageReference Include="OrionLock.Testing" />
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\..\src\Moongazing.OrionShowcase.Application\Moongazing.OrionShowcase.Application.csproj" />
     <ProjectReference Include="..\..\src\Moongazing.OrionShowcase.Domain\Moongazing.OrionShowcase.Domain.csproj" />
-    <!-- Referenced so the in-memory reader-writer lock provider (the backend behind OrionLock 0.4's
-         ISharedExclusiveLock in this sample) can be exercised directly without Docker / Postgres. -->
+    <!-- Referenced so the infrastructure DI wiring (distributed lock + reader-writer lock) can be
+         exercised without Docker / Postgres. -->
     <ProjectReference Include="..\..\src\Moongazing.OrionShowcase.Infrastructure\Moongazing.OrionShowcase.Infrastructure.csproj" />
   </ItemGroup>
 </Project>

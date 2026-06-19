@@ -32,10 +32,10 @@ public class TransferMoneyHandlerTests
         public Task<int> SaveChangesAsync(CancellationToken ct) { Calls++; return Task.FromResult(1); }
     }
 
-    // Records, in invocation order, the (key, mode) pairs acquired and the keys released, so a test
-    // can assert a transfer takes an EXCLUSIVE hold on each account in deterministic (sorted) order
-    // and releases both on the success and error paths.
-    private sealed class RecordingLock : ISharedExclusiveLock
+    // Records, in invocation order, the (key, mode) pairs acquired and the keys released over the
+    // in-process reader-writer lock, so a test can assert a transfer takes an EXCLUSIVE hold on each
+    // account in deterministic (sorted) order and releases both on the success and error paths.
+    private sealed class RecordingReaderWriterLock : ISharedExclusiveLock
     {
         public List<(string Key, LockMode Mode)> Acquired { get; } = new();
         public List<string> Released { get; } = new();
@@ -70,8 +70,8 @@ public class TransferMoneyHandlerTests
 
         private sealed class Handle : IDistributedLockHandle
         {
-            private readonly RecordingLock _owner;
-            public Handle(string key, RecordingLock owner) { Key = key; _owner = owner; }
+            private readonly RecordingReaderWriterLock _owner;
+            public Handle(string key, RecordingReaderWriterLock owner) { Key = key; _owner = owner; }
             public string Key { get; }
             public bool IsHeld { get; private set; } = true;
             public CancellationToken LostToken => CancellationToken.None;
@@ -110,7 +110,8 @@ public class TransferMoneyHandlerTests
         var clock = new FixedClock();
         var repo = new FakeAccountRepo();
         var uow = new CountingUow();
-        var locker = new RecordingLock();
+        var distributed = new StubDistributedLock();
+        var readerWriter = new RecordingReaderWriterLock();
 
         // Pick two ids whose Guid string ordering is deterministic.
         var lower = new AccountId(new Guid("11111111-1111-1111-1111-111111111111"));
@@ -121,7 +122,7 @@ public class TransferMoneyHandlerTests
         repo.Store[from.Id] = from;
         repo.Store[to.Id] = to;
 
-        var sut = new TransferMoneyHandler(repo, uow, locker, clock);
+        var sut = new TransferMoneyHandler(repo, uow, distributed, readerWriter, clock);
 
         var cmd = new TransferMoneyCommand(
             From: from.Id,
@@ -136,13 +137,20 @@ public class TransferMoneyHandlerTests
         from.Balance.Amount.Should().Be(60m);
         to.Balance.Amount.Should().Be(40m);
         uow.Calls.Should().Be(1);
-        locker.Acquired.Should().HaveCount(2);
-        // Both holds are EXCLUSIVE (a transfer mutates both balances) and taken in sorted id order.
-        locker.Acquired[0].Mode.Should().Be(LockMode.Exclusive);
-        locker.Acquired[1].Mode.Should().Be(LockMode.Exclusive);
-        locker.Acquired[0].Key.Should().Contain(lower.Value.ToString("N"));
-        locker.Acquired[1].Key.Should().Contain(higher.Value.ToString("N"));
-        locker.Released.Should().HaveCount(2);
+
+        // The DISTRIBUTED lock (cross-replica safety) is taken on both accounts in sorted id order.
+        distributed.Acquired.Should().HaveCount(2);
+        distributed.Acquired[0].Should().Contain(lower.Value.ToString("N"));
+        distributed.Acquired[1].Should().Contain(higher.Value.ToString("N"));
+        distributed.Released.Should().HaveCount(2);
+
+        // The in-process reader-writer holds are EXCLUSIVE and taken in the same sorted order.
+        readerWriter.Acquired.Should().HaveCount(2);
+        readerWriter.Acquired[0].Mode.Should().Be(LockMode.Exclusive);
+        readerWriter.Acquired[1].Mode.Should().Be(LockMode.Exclusive);
+        readerWriter.Acquired[0].Key.Should().Contain(lower.Value.ToString("N"));
+        readerWriter.Acquired[1].Key.Should().Contain(higher.Value.ToString("N"));
+        readerWriter.Released.Should().HaveCount(2);
     }
 
     [Fact]
@@ -151,14 +159,15 @@ public class TransferMoneyHandlerTests
         var clock = new FixedClock();
         var repo = new FakeAccountRepo();
         var uow = new CountingUow();
-        var locker = new RecordingLock();
+        var distributed = new StubDistributedLock();
+        var readerWriter = new RecordingReaderWriterLock();
 
         var from = NewActiveAccount(clock, opening: 10m);
         var to = NewActiveAccount(clock, opening: 0m);
         repo.Store[from.Id] = from;
         repo.Store[to.Id] = to;
 
-        var sut = new TransferMoneyHandler(repo, uow, locker, clock);
+        var sut = new TransferMoneyHandler(repo, uow, distributed, readerWriter, clock);
 
         var cmd = new TransferMoneyCommand(
             From: from.Id,
@@ -173,6 +182,8 @@ public class TransferMoneyHandlerTests
         uow.Calls.Should().Be(0);
         from.Balance.Amount.Should().Be(10m);
         to.Balance.Amount.Should().Be(0m);
-        locker.Released.Should().HaveCount(2);
+        // Both lock layers are released on the error path too.
+        distributed.Released.Should().HaveCount(2);
+        readerWriter.Released.Should().HaveCount(2);
     }
 }

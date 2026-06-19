@@ -16,18 +16,21 @@ public sealed class TransferMoneyHandler
 {
     private readonly IAccountRepository _accounts;
     private readonly IUnitOfWork _uow;
-    private readonly ISharedExclusiveLock _locker;
+    private readonly IDistributedLock _locker;
+    private readonly ISharedExclusiveLock _readerWriter;
     private readonly IClock _clock;
 
     public TransferMoneyHandler(
         IAccountRepository accounts,
         IUnitOfWork uow,
-        ISharedExclusiveLock locker,
+        IDistributedLock locker,
+        ISharedExclusiveLock readerWriter,
         IClock clock)
     {
         _accounts = accounts;
         _uow = uow;
         _locker = locker;
+        _readerWriter = readerWriter;
         _clock = clock;
     }
 
@@ -37,9 +40,9 @@ public sealed class TransferMoneyHandler
     {
         Ensure.NotNull(request);
 
-        // A transfer mutates both balances, so it takes an EXCLUSIVE (writer) hold on each account
-        // via OrionLock 0.4's ISharedExclusiveLock. The exclusive hold excludes both concurrent
-        // mutations and concurrent balance reads (which take a shared hold) on the same account.
+        // A transfer mutates both balances, so it takes the DISTRIBUTED (Postgres advisory) lock on
+        // each account FIRST. This is the real cross-replica safety mechanism: it serializes
+        // mutations of the same account across every process/replica.
         //
         // Sort the two account ids so two concurrent transfers between the same pair always acquire
         // the holds in the same order. This avoids the classic deadlock pattern (A then B vs B then A).
@@ -56,14 +59,28 @@ public sealed class TransferMoneyHandler
         var secondKey = AccountLock.KeyFor(secondId);
 
         var firstHandle = await _locker
-            .AcquireExclusiveAsync(firstKey, AccountLock.Options, cancellationToken)
+            .AcquireAsync(firstKey, AccountLock.Options, cancellationToken)
             .ConfigureAwait(false);
         await using var firstLock = firstHandle.ConfigureAwait(false);
 
         var secondHandle = await _locker
-            .AcquireExclusiveAsync(secondKey, AccountLock.Options, cancellationToken)
+            .AcquireAsync(secondKey, AccountLock.Options, cancellationToken)
             .ConfigureAwait(false);
         await using var secondLock = secondHandle.ConfigureAwait(false);
+
+        // Additional IN-PROCESS guards: take EXCLUSIVE reader-writer holds (same sorted order) so a
+        // concurrent balance read (GetBalance, SHARED) on this process never observes a half-applied
+        // transfer. Single-process/sample-only, NOT the cross-replica guarantee; that is the
+        // distributed locks above. A distributed reader-writer provider would unify the two.
+        var firstRwHandle = await _readerWriter
+            .AcquireExclusiveAsync(firstKey, AccountLock.Options, cancellationToken)
+            .ConfigureAwait(false);
+        await using var firstRwLock = firstRwHandle.ConfigureAwait(false);
+
+        var secondRwHandle = await _readerWriter
+            .AcquireExclusiveAsync(secondKey, AccountLock.Options, cancellationToken)
+            .ConfigureAwait(false);
+        await using var secondRwLock = secondRwHandle.ConfigureAwait(false);
 
         var from = await _accounts.GetAsync(request.From, cancellationToken).ConfigureAwait(false);
         if (from is null)

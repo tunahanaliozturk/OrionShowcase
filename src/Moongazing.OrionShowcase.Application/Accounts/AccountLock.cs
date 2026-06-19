@@ -5,14 +5,31 @@ using Moongazing.OrionLock;
 using Moongazing.OrionShowcase.Domain.ValueObjects;
 
 /// <summary>
-/// Shared keying and acquisition options for the per-account reader-writer hold taken around
-/// account money operations via OrionLock 0.4's <see cref="ISharedExclusiveLock"/>.
+/// Shared keying and acquisition options for the per-account holds taken around account money
+/// operations.
 /// </summary>
 /// <remarks>
-/// Balance-mutating handlers (deposit, withdraw, transfer) acquire an EXCLUSIVE hold; the balance
-/// read (GetBalance) acquires a SHARED hold. Centralising the key format here guarantees every
-/// handler contends on the same key for a given account, so a read cannot run concurrently with a
-/// mutation of the same account.
+/// <para>
+/// Two lock layers share this key per account:
+/// </para>
+/// <list type="bullet">
+///   <item><description>
+///     Balance-mutating handlers (deposit, withdraw, transfer) acquire the DISTRIBUTED
+///     <see cref="IDistributedLock"/> (Postgres advisory backend). This is the real cross-replica
+///     safety mechanism: it serializes mutations of the same account across every process/replica.
+///   </description></item>
+///   <item><description>
+///     The same handlers additionally take an EXCLUSIVE <see cref="ISharedExclusiveLock"/> hold, and
+///     the balance read (GetBalance) takes a SHARED hold, over the in-memory reader-writer provider.
+///     This demonstrates shared-read vs exclusive semantics and guards reads against half-applied
+///     mutations WITHIN a single process. It is single-process/sample-only; a distributed
+///     reader-writer provider would extend it across replicas in production.
+///   </description></item>
+/// </list>
+/// <para>
+/// Centralising the key format here guarantees every handler contends on the same key for a given
+/// account at both layers.
+/// </para>
 /// </remarks>
 internal static class AccountLock
 {

@@ -34,17 +34,29 @@ public sealed class OpenAccountHandler
 
         if (!result.Succeeded)
         {
-            // The saga rolled back the completed steps. Distinguish an operational timeout/cancellation
-            // from a genuine business failure so the caller does not read a slow dependency or an
-            // aborted request as a rejected open. OrionSaga 0.2 separates these via TimedOut/Cancelled.
-            var reason = result switch
+            // The saga rolled back the completed steps. A per-step timeout or a cancellation is a
+            // TRANSIENT operational outcome (slow dependency, shutdown, client abort), NOT a business
+            // rejection. OrionSaga 0.2 separates these via TimedOut/Cancelled.
+            //
+            // Throw a TransientOperationException for those so IdempotencyBehavior does NOT cache a
+            // result for this key: the pipeline only stores a response when the handler returns
+            // normally. A subsequent retry with the same idempotency key must be able to run the saga
+            // again rather than replaying the cached transient failure.
+            if (result.TimedOut)
             {
-                { TimedOut: true } =>
-                    $"Account opening timed out at step '{result.FailedStep}'. Please retry.",
-                { Cancelled: true } =>
-                    $"Account opening was cancelled at step '{result.FailedStep}'.",
-                _ => result.Failure?.Message ?? $"Account opening failed at step '{result.FailedStep}'.",
-            };
+                throw new TransientOperationException(
+                    $"Account opening timed out at step '{result.FailedStep}'. Please retry.");
+            }
+
+            if (result.Cancelled)
+            {
+                throw new TransientOperationException(
+                    $"Account opening was cancelled at step '{result.FailedStep}'.");
+            }
+
+            // A genuine business failure IS a durable result: return it so the idempotency layer
+            // captures it and a retry replays the same business decision rather than re-running.
+            var reason = result.Failure?.Message ?? $"Account opening failed at step '{result.FailedStep}'.";
             return Result<OpenAccountResult>.Fail(reason);
         }
 

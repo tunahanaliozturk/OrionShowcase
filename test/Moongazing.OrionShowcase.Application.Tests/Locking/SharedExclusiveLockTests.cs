@@ -4,13 +4,15 @@ using System.Threading;
 using System.Threading.Tasks;
 using FluentAssertions;
 using Moongazing.OrionLock;
-using Moongazing.OrionShowcase.Infrastructure.Locking;
+using Moongazing.OrionLock.Testing;
 using Xunit;
 
 /// <summary>
-/// Exercises OrionLock 0.4's reader-writer semantics over the showcase's in-memory provider: the
-/// same coordination a balance read (shared) and a balance mutation (exclusive) rely on. Runs
-/// without Docker; the provider is purely in-process.
+/// Exercises OrionLock 0.4's reader-writer semantics over the canonical in-memory provider shipped in
+/// OrionLock.Testing (the same backend the showcase wires behind <see cref="ISharedExclusiveLock"/>):
+/// the coordination a balance read (shared) and a balance mutation (exclusive) rely on. Runs without
+/// Docker; the provider is purely in-process. The provider prevents writer starvation via a
+/// pending-writer reservation, asserted by <see cref="Waiting_writer_is_not_starved_by_a_continuous_reader_stream"/>.
 /// </summary>
 public class SharedExclusiveLockTests
 {
@@ -93,6 +95,42 @@ public class SharedExclusiveLockTests
         var secondAfter = await sut.TryAcquireExclusiveAsync(Key, FastOptions, CancellationToken.None);
         secondAfter.Should().NotBeNull("the first exclusive hold was released");
         await secondAfter!.DisposeAsync();
+    }
+
+    [Fact]
+    public async Task Waiting_writer_is_not_starved_by_a_continuous_reader_stream()
+    {
+        // This is the regression guard for the reader-preference starvation the hand-rolled provider
+        // had: a steady stream of NEW readers must NOT be able to keep a waiting writer out forever.
+        // The canonical provider records a pending-writer reservation when an exclusive acquire is
+        // blocked by current readers, and refuses NEW shared acquires while that reservation is live,
+        // so the existing readers drain and the writer eventually gets in.
+        var sut = NewLock();
+
+        // One reader currently holds the key.
+        var reader = await sut.AcquireSharedAsync(Key, FastOptions, CancellationToken.None);
+
+        // A writer tries to acquire and is blocked by the live reader. This non-blocking attempt fails
+        // but, crucially, records the pending-writer reservation on the key.
+        var blockedWriter = await sut.TryAcquireExclusiveAsync(Key, FastOptions, CancellationToken.None);
+        blockedWriter.Should().BeNull("the writer cannot acquire while a reader holds the key");
+
+        // Simulate the continuous reader stream: while the writer is waiting, NEW readers must be
+        // refused. If readers kept being admitted here, the writer would starve - the original bug.
+        for (var i = 0; i < 5; i++)
+        {
+            var newReader = await sut.TryAcquireSharedAsync(Key, FastOptions, CancellationToken.None);
+            newReader.Should().BeNull(
+                "a new reader must not be admitted while a writer is waiting, or the writer would starve");
+        }
+
+        // The existing reader drains.
+        await reader.DisposeAsync();
+
+        // With no readers left and the reservation honoured, the writer now acquires.
+        var writer = await sut.TryAcquireExclusiveAsync(Key, FastOptions, CancellationToken.None);
+        writer.Should().NotBeNull("once the last reader drained, the waiting writer acquires");
+        await writer!.DisposeAsync();
     }
 
     [Fact]
