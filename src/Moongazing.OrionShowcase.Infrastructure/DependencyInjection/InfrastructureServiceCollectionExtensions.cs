@@ -7,8 +7,11 @@ using Microsoft.Extensions.DependencyInjection;
 using Moongazing.OrionAudit;
 using Moongazing.OrionBeacon;
 using Moongazing.OrionBeacon.Observers;
+using Moongazing.OrionLock;
 using Moongazing.OrionLock.DependencyInjection;
 using Moongazing.OrionLock.Postgres;
+using Moongazing.OrionLock.Providers;
+using Moongazing.OrionLock.Testing;
 using Moongazing.OrionPatch.DependencyInjection;
 using Moongazing.OrionPatch.EntityFrameworkCore.DependencyInjection;
 using Moongazing.OrionShowcase.Application.Abstractions;
@@ -98,10 +101,30 @@ public static class InfrastructureServiceCollectionExtensions
         services.AddSingleton<IClock>(sp => sp.GetRequiredService<SystemClock>());
         services.AddSingleton<Moongazing.Orion.Abstractions.Time.IOrionClock>(sp => sp.GetRequiredService<SystemClock>());
 
-        // OrionLock with Postgres pg_try_advisory_lock backend. Registered as singleton by
-        // the package so TransferMoneyHandler's IDistributedLock dependency resolves
-        // without further plumbing.
+        // OrionLock with Postgres pg_try_advisory_lock backend. This is the REAL cross-replica
+        // safety mechanism: the exclusive-only IDistributedLock it registers serializes balance
+        // MUTATIONS (deposit, withdraw, transfer) across every process/replica, because the advisory
+        // lock lives in the shared Postgres instance. The money-mutating handlers depend on this
+        // IDistributedLock, NOT on the in-memory reader-writer lock below, so a multi-replica
+        // deployment still serializes mutations correctly.
         services.AddOrionLock().UsePostgres(bankingConnectionString);
+
+        // OrionLock 0.4 reader-writer (shared/exclusive) lock, used to demonstrate SHARED-read vs
+        // EXCLUSIVE semantics on the balance-read path (GetBalance takes a SHARED hold). It runs over
+        // the canonical in-memory ISharedExclusiveLockProvider that ships in OrionLock.Testing, which
+        // prevents writer starvation via a pending-writer reservation (a steady reader stream cannot
+        // starve a waiting writer).
+        //
+        // IMPORTANT - SINGLE-PROCESS / SAMPLE-ONLY: this provider is in-memory, so its reader-writer
+        // coordination spans only THIS process. It must NOT be used as the cross-replica safety
+        // mechanism for money mutations - that role belongs to the distributed Postgres IDistributedLock
+        // above. OrionLock 0.4 ships shared/exclusive semantics for the in-memory backend only; the
+        // distributed backends do not yet model shared holders. In production a distributed
+        // reader-writer provider (for example Redis) would back ISharedExclusiveLock and unify the two,
+        // and the handlers - which depend only on these abstractions - would not change.
+        services.AddSingleton<ISharedExclusiveLockProvider, InMemorySharedExclusiveLockProvider>();
+        services.AddSingleton<ISharedExclusiveLock>(sp =>
+            new SharedExclusiveLock(sp.GetRequiredService<ISharedExclusiveLockProvider>()));
 
         // OrionKey is a process-global static; configure once even if AddInfrastructure
         // is called from multiple hosts (tests do this).

@@ -9,6 +9,7 @@
     <PackageVersion Include="OrionAudit" Version="0.8.0" />
     <PackageVersion Include="OrionLock" Version="0.4.0" />
     <PackageVersion Include="OrionLock.Postgres" Version="0.4.0" />
+    <PackageVersion Include="OrionLock.Testing" Version="0.4.0" />
     <PackageVersion Include="OrionKey" Version="0.6.0" />
     <PackageVersion Include="OrionPatch" Version="0.3.0" />
     <PackageVersion Include="OrionPatch.EntityFrameworkCore" Version="0.3.0" />

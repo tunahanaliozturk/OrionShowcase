@@ -18,6 +18,10 @@
     <PackageReference Include="OrionKey" />
     <PackageReference Include="OrionLock" />
     <PackageReference Include="OrionLock.Postgres" />
+    <!-- Canonical in-memory reader-writer (ISharedExclusiveLockProvider) backend. It prevents writer
+         starvation via a pending-writer reservation, so the showcase wires it instead of a hand-rolled
+         provider. Single-process / sample-only: see the SharedExclusiveLock registration note. -->
+    <PackageReference Include="OrionLock.Testing" />
     <PackageReference Include="OrionPatch" />
     <PackageReference Include="OrionPatch.EntityFrameworkCore" />
     <PackageReference Include="OrionVault" />

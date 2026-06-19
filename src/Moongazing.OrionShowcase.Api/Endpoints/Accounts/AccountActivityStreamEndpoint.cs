@@ -39,12 +39,25 @@ internal static class AccountActivityStreamEndpoint
         context.Response.Headers["Cache-Control"] = "no-cache";
         context.Response.Headers["X-Accel-Buffering"] = "no";
 
+        // Resume contract (OrionStream 0.2): a browser EventSource that reconnects after a dropped
+        // connection re-sends the id of the last event it saw in the standard "Last-Event-ID"
+        // request header. We pass it to Subscribe(topic, lastEventId) so the hub replays the
+        // account-activity events published after that cursor from its bounded per-topic replay
+        // buffer before live events flow, and the client misses nothing across the gap. The cursor
+        // is the wire id each event carries (see AccountActivityPublisher, which stamps a stable
+        // per-event id). When the header is absent (first connect) or names a cursor the replay
+        // buffer no longer holds (evicted), the hub starts the stream from now with no replay.
+        var lastEventId = context.Request.Headers["Last-Event-ID"].ToString();
+
         // Bound the stream: end when the client disconnects or the lifetime cap elapses.
         using var lifetime = new CancellationTokenSource(MaxStreamLifetime);
         using var linked = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, lifetime.Token);
 
-        // Subscribe before writing so events published during the handshake are not missed.
-        using var subscription = hub.Subscribe(AccountActivityPublisher.TopicFor(id));
+        // Subscribe before writing so events published during the handshake are not missed. Passing
+        // the Last-Event-ID resumes from the client's cursor; a null/empty value starts from now.
+        using var subscription = hub.Subscribe(
+            AccountActivityPublisher.TopicFor(id),
+            string.IsNullOrEmpty(lastEventId) ? null : lastEventId);
 
         try
         {

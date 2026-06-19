@@ -4,6 +4,7 @@ using System.Globalization;
 using MediatR;
 using Moongazing.OrionGuard.Core;
 using Moongazing.OrionLock;
+using Moongazing.OrionShowcase.Application.Accounts;
 using Moongazing.OrionShowcase.Application.Common;
 using Moongazing.OrionShowcase.Domain.Abstractions;
 using Moongazing.OrionShowcase.Domain.Accounts;
@@ -13,28 +14,23 @@ using Moongazing.OrionShowcase.Domain.ValueObjects;
 public sealed class TransferMoneyHandler
     : IRequestHandler<TransferMoneyCommand, Result<TransferMoneyResult>>
 {
-    private static readonly DistributedLockOptions LockOptions = new()
-    {
-        LeaseDuration = TimeSpan.FromSeconds(30),
-        WaitTimeout = TimeSpan.FromSeconds(10),
-        RetryInterval = TimeSpan.FromMilliseconds(250),
-        AutoRenew = true,
-    };
-
     private readonly IAccountRepository _accounts;
     private readonly IUnitOfWork _uow;
     private readonly IDistributedLock _locker;
+    private readonly ISharedExclusiveLock _readerWriter;
     private readonly IClock _clock;
 
     public TransferMoneyHandler(
         IAccountRepository accounts,
         IUnitOfWork uow,
         IDistributedLock locker,
+        ISharedExclusiveLock readerWriter,
         IClock clock)
     {
         _accounts = accounts;
         _uow = uow;
         _locker = locker;
+        _readerWriter = readerWriter;
         _clock = clock;
     }
 
@@ -44,9 +40,12 @@ public sealed class TransferMoneyHandler
     {
         Ensure.NotNull(request);
 
-        // Sort the two account ids so two concurrent transfers between the same
-        // pair always acquire the locks in the same order. This avoids the classic
-        // deadlock pattern (A then B vs B then A).
+        // A transfer mutates both balances, so it takes the DISTRIBUTED (Postgres advisory) lock on
+        // each account FIRST. This is the real cross-replica safety mechanism: it serializes
+        // mutations of the same account across every process/replica.
+        //
+        // Sort the two account ids so two concurrent transfers between the same pair always acquire
+        // the holds in the same order. This avoids the classic deadlock pattern (A then B vs B then A).
         var firstId = request.From;
         var secondId = request.To;
         if (string.CompareOrdinal(
@@ -56,18 +55,32 @@ public sealed class TransferMoneyHandler
             (firstId, secondId) = (secondId, firstId);
         }
 
-        var firstKey = LockKey(firstId);
-        var secondKey = LockKey(secondId);
+        var firstKey = AccountLock.KeyFor(firstId);
+        var secondKey = AccountLock.KeyFor(secondId);
 
         var firstHandle = await _locker
-            .AcquireAsync(firstKey, LockOptions, cancellationToken)
+            .AcquireAsync(firstKey, AccountLock.Options, cancellationToken)
             .ConfigureAwait(false);
         await using var firstLock = firstHandle.ConfigureAwait(false);
 
         var secondHandle = await _locker
-            .AcquireAsync(secondKey, LockOptions, cancellationToken)
+            .AcquireAsync(secondKey, AccountLock.Options, cancellationToken)
             .ConfigureAwait(false);
         await using var secondLock = secondHandle.ConfigureAwait(false);
+
+        // Additional IN-PROCESS guards: take EXCLUSIVE reader-writer holds (same sorted order) so a
+        // concurrent balance read (GetBalance, SHARED) on this process never observes a half-applied
+        // transfer. Single-process/sample-only, NOT the cross-replica guarantee; that is the
+        // distributed locks above. A distributed reader-writer provider would unify the two.
+        var firstRwHandle = await _readerWriter
+            .AcquireExclusiveAsync(firstKey, AccountLock.Options, cancellationToken)
+            .ConfigureAwait(false);
+        await using var firstRwLock = firstRwHandle.ConfigureAwait(false);
+
+        var secondRwHandle = await _readerWriter
+            .AcquireExclusiveAsync(secondKey, AccountLock.Options, cancellationToken)
+            .ConfigureAwait(false);
+        await using var secondRwLock = secondRwHandle.ConfigureAwait(false);
 
         var from = await _accounts.GetAsync(request.From, cancellationToken).ConfigureAwait(false);
         if (from is null)
@@ -102,7 +115,4 @@ public sealed class TransferMoneyHandler
         return Result<TransferMoneyResult>.Ok(
             new TransferMoneyResult(Guid.NewGuid(), from.Balance.Amount));
     }
-
-    private static string LockKey(AccountId id) =>
-        $"account:{id.Value.ToString("N", CultureInfo.InvariantCulture)}";
 }
