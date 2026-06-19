@@ -3,29 +3,29 @@
     <ManagePackageVersionsCentrally>true</ManagePackageVersionsCentrally>
   </PropertyGroup>
   <ItemGroup>
-    <!-- Orion family - chain 22 latest stable (Guard 6.5.21 + Patch 0.2.22 + others 0.X.21) -->
-    <PackageVersion Include="OrionGuard" Version="6.5.21" />
-    <PackageVersion Include="OrionGuard.AspNetCore" Version="6.5.21" />
-    <PackageVersion Include="OrionAudit" Version="0.7.21" />
-    <PackageVersion Include="OrionLock" Version="0.3.21" />
-    <PackageVersion Include="OrionLock.Postgres" Version="0.3.21" />
-    <PackageVersion Include="OrionKey" Version="0.5.21" />
-    <PackageVersion Include="OrionPatch" Version="0.2.22" />
-    <PackageVersion Include="OrionPatch.EntityFrameworkCore" Version="0.2.22" />
-    <PackageVersion Include="OrionVault" Version="0.2.21" />
-    <PackageVersion Include="OrionVault.EntityFrameworkCore" Version="0.2.21" />
-    <!-- Orion family - PASS 1 cross-cutting infra/auth packages (published 0.1.0, net8.0) -->
-    <PackageVersion Include="OrionLens" Version="0.1.0" />
-    <PackageVersion Include="OrionShade" Version="0.1.0" />
-    <PackageVersion Include="OrionGrant" Version="0.1.0" />
-    <PackageVersion Include="OrionLedger" Version="0.1.0" />
-    <PackageVersion Include="OrionOnce" Version="0.1.0" />
-    <!-- Orion family - PASS 2 domain/event-level packages (published 0.1.0, net8.0) -->
-    <PackageVersion Include="OrionSaga" Version="0.1.0" />
-    <PackageVersion Include="OrionRelay" Version="0.1.0" />
-    <PackageVersion Include="OrionStream" Version="0.1.0" />
-    <PackageVersion Include="OrionBeacon" Version="0.1.0" />
-    <PackageVersion Include="Orion.Abstractions" Version="0.1.0" />
+    <!-- Orion family - maturity wave: classics on their new minor, new packages on 0.2.0 -->
+    <PackageVersion Include="OrionGuard" Version="6.6.0" />
+    <PackageVersion Include="OrionGuard.AspNetCore" Version="6.6.0" />
+    <PackageVersion Include="OrionAudit" Version="0.8.0" />
+    <PackageVersion Include="OrionLock" Version="0.4.0" />
+    <PackageVersion Include="OrionLock.Postgres" Version="0.4.0" />
+    <PackageVersion Include="OrionKey" Version="0.6.0" />
+    <PackageVersion Include="OrionPatch" Version="0.3.0" />
+    <PackageVersion Include="OrionPatch.EntityFrameworkCore" Version="0.3.0" />
+    <PackageVersion Include="OrionVault" Version="0.3.0" />
+    <PackageVersion Include="OrionVault.EntityFrameworkCore" Version="0.3.0" />
+    <!-- Orion family - cross-cutting infra/auth packages (0.2.0) -->
+    <PackageVersion Include="OrionLens" Version="0.2.0" />
+    <PackageVersion Include="OrionShade" Version="0.2.0" />
+    <PackageVersion Include="OrionGrant" Version="0.2.0" />
+    <PackageVersion Include="OrionLedger" Version="0.2.0" />
+    <PackageVersion Include="OrionOnce" Version="0.2.0" />
+    <!-- Orion family - domain/event-level packages (0.2.0) -->
+    <PackageVersion Include="OrionSaga" Version="0.2.0" />
+    <PackageVersion Include="OrionRelay" Version="0.2.0" />
+    <PackageVersion Include="OrionStream" Version="0.2.0" />
+    <PackageVersion Include="OrionBeacon" Version="0.2.0" />
+    <PackageVersion Include="Orion.Abstractions" Version="0.2.0" />
     <!-- Framework + libs -->
     <PackageVersion Include="MediatR" Version="12.4.1" />
     <PackageVersion Include="Microsoft.EntityFrameworkCore" Version="9.0.1" />
