@@ -43,6 +43,7 @@ jobs:
         # a Testcontainers container), so the Testcontainers/services-postgres Docker-socket race is
         # avoided while the full register/open/transfer, PII-at-rest, national-id uniqueness, SSE
         # resume, and outbox/webhook dead-letter flows run end-to-end against a real Postgres.
+        timeout-minutes: 12
         env:
           BANKING_TEST_POSTGRES: "Host=localhost;Port=5432;Username=bank;Password=bank;Database=banking_ci"
         run: dotnet test Moongazing.OrionShowcase.sln -c Release --no-build --logger "console;verbosity=normal" --filter "FullyQualifiedName~IntegrationTests"

@@ -1,7 +1,10 @@
 namespace Moongazing.OrionShowcase.IntegrationTests;
 
+using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
+using Microsoft.AspNetCore.TestHost;
 using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Npgsql;
 using Testcontainers.PostgreSql;
@@ -73,6 +76,31 @@ public sealed class BankingApiFixture : WebApplicationFactory<Program>, IAsyncLi
         });
 
         return base.CreateHost(builder);
+    }
+
+    protected override void ConfigureWebHost(IWebHostBuilder builder)
+    {
+        ArgumentNullException.ThrowIfNull(builder);
+
+        builder.ConfigureTestServices(services =>
+        {
+            // The timer-based background services (outbox archival, daily settlement, and the
+            // OrionBeacon leader election) are never exercised by the endpoint-level tests, which
+            // drive the stores directly. Left running they only loop forever and delay the test
+            // host's shutdown, so remove them here while keeping the framework's own hosted service
+            // (the TestServer) intact.
+            var background = services
+                .Where(d => d.ServiceType == typeof(IHostedService)
+                    && d.ImplementationType is { } impl
+                    && (impl.Name is "OutboxArchivalService" or "DailySettlementService"
+                        || impl.Name.Contains("LeaderElection", StringComparison.Ordinal)))
+                .ToList();
+
+            foreach (var descriptor in background)
+            {
+                services.Remove(descriptor);
+            }
+        });
     }
 
     public async Task InitializeAsync()
