@@ -38,9 +38,14 @@ jobs:
       - name: Unit tests (exclude IntegrationTests which need Testcontainers)
         run: dotnet test Moongazing.OrionShowcase.sln -c Release --no-build --logger "console;verbosity=normal" --filter "FullyQualifiedName!~IntegrationTests"
 
-      - name: Integration tests (skipped in CI; Testcontainers conflicts with GH services container)
-        run: echo "IntegrationTests are run locally with 'docker compose up' + 'dotnet test'. The Testcontainers + GitHub Actions services-postgres combination causes a Docker-socket race; we will revisit in a future CI overhaul. See README's Five-minute experience for the local run."
-        if: false  # disabled until the CI harness is rewritten
+      - name: Integration tests (end-to-end against the services Postgres)
+        # The fixture provisions a unique database per test class on this server (instead of starting
+        # a Testcontainers container), so the Testcontainers/services-postgres Docker-socket race is
+        # avoided while the full register/open/transfer, PII-at-rest, national-id uniqueness, SSE
+        # resume, and outbox/webhook dead-letter flows run end-to-end against a real Postgres.
+        env:
+          BANKING_TEST_POSTGRES: "Host=localhost;Port=5432;Username=bank;Password=bank;Database=banking_ci"
+        run: dotnet test Moongazing.OrionShowcase.sln -c Release --no-build --logger "console;verbosity=normal" --filter "FullyQualifiedName~IntegrationTests"
 
   publish-docker:
     needs: build-and-test
