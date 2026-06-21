@@ -50,9 +50,27 @@ jobs:
       # flip `if: false` to a real run with the env + filter below:
       #   env: { BANKING_TEST_POSTGRES: "Host=localhost;Port=5432;Username=bank;Password=bank;Database=banking_ci" }
       #   run: dotnet test ... --filter "FullyQualifiedName~IntegrationTests" --blame-hang-timeout 120s
-      - name: Integration tests (end-to-end) - pending hang fix, see ROADMAP
-        if: false
-        run: echo "Disabled until the RegisterAndOpenAccountTests hang against a real Postgres is diagnosed. The harness (per-database fixture, sequential, hosted-services-off) is ready; this step just needs the hang fixed and the guard flipped."
+      - name: Integration tests (DIAGNOSTIC - collect hang dump)
+        id: integration
+        continue-on-error: true
+        timeout-minutes: 8
+        env:
+          BANKING_TEST_POSTGRES: "Host=localhost;Port=5432;Username=bank;Password=bank;Database=banking_ci"
+        run: dotnet test Moongazing.OrionShowcase.sln -c Release --no-build --logger "console;verbosity=normal" --filter "FullyQualifiedName~IntegrationTests" --blame-hang-timeout 90s --blame-hang-dump-type full
+
+      - name: Analyze hang dump (managed stacks of the stalled test host)
+        if: always()
+        run: |
+          dotnet tool install -g dotnet-dump >/dev/null 2>&1 || true
+          export PATH="$PATH:$HOME/.dotnet/tools"
+          DUMP=$(find . -name "*.dmp" 2>/dev/null | head -1)
+          echo "dump file: ${DUMP:-<none>}"
+          if [ -n "$DUMP" ]; then
+            echo "===== PARALLEL STACKS ====="
+            dotnet-dump analyze "$DUMP" -c "pstacks" -c "exit" 2>&1 | head -200
+            echo "===== ALL THREAD STACKS ====="
+            dotnet-dump analyze "$DUMP" -c "clrstack -all" -c "exit" 2>&1 | head -400
+          fi
 
   publish-docker:
     needs: build-and-test
