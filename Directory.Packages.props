@@ -13,8 +13,8 @@
     <PackageVersion Include="OrionKey" Version="0.6.2" />
     <PackageVersion Include="OrionPatch" Version="0.3.1" />
     <PackageVersion Include="OrionPatch.EntityFrameworkCore" Version="0.3.1" />
-    <PackageVersion Include="OrionVault" Version="0.3.2" />
-    <PackageVersion Include="OrionVault.EntityFrameworkCore" Version="0.3.2" />
+    <PackageVersion Include="OrionVault" Version="0.3.3" />
+    <PackageVersion Include="OrionVault.EntityFrameworkCore" Version="0.3.3" />
     <!-- Orion family - cross-cutting infra/auth packages -->
     <PackageVersion Include="OrionLens" Version="0.2.1" />
     <PackageVersion Include="OrionShade" Version="0.2.1" />
