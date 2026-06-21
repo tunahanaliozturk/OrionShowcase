@@ -66,10 +66,12 @@ jobs:
           DUMP=$(find . -name "*.dmp" 2>/dev/null | head -1)
           echo "dump file: ${DUMP:-<none>}"
           if [ -n "$DUMP" ]; then
-            echo "===== PARALLEL STACKS ====="
-            dotnet-dump analyze "$DUMP" -c "pstacks" -c "exit" 2>&1 | head -200
+            echo "===== PENDING ASYNC ====="
+            dotnet-dump analyze "$DUMP" -c "dumpasync -completed" -c "exit" 2>&1 | head -150
             echo "===== ALL THREAD STACKS ====="
             dotnet-dump analyze "$DUMP" -c "clrstack -all" -c "exit" 2>&1 | head -400
+          else
+            echo "No hang dump produced - the integration suite did not stall."
           fi
 
   publish-docker:
