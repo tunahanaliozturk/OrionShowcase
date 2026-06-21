@@ -84,16 +84,18 @@ public sealed class BankingApiFixture : WebApplicationFactory<Program>, IAsyncLi
 
         builder.ConfigureTestServices(services =>
         {
-            // The timer-based background services (outbox archival, daily settlement, and the
-            // OrionBeacon leader election) are never exercised by the endpoint-level tests, which
-            // drive the stores directly. Left running they only loop forever and delay the test
-            // host's shutdown, so remove them here while keeping the framework's own hosted service
-            // (the TestServer) intact.
+            // Remove every application background service from the test host, keeping only the
+            // framework's own web-host service. The endpoint tests drive the stores directly and do
+            // not need the timer-based workers (outbox archival, daily settlement); critically the
+            // OrionBeacon leader-election hosted service blocks host startup while it acquires a
+            // lease, which deadlocks WebApplicationFactory's synchronous host.Start(). Matching by
+            // implementation-type name is not enough because some of these are registered through a
+            // factory (null ImplementationType), so we keep only GenericWebHostService and drop the
+            // rest.
+            const string webHost = "Microsoft.AspNetCore.Hosting.GenericWebHostService";
             var background = services
                 .Where(d => d.ServiceType == typeof(IHostedService)
-                    && d.ImplementationType is { } impl
-                    && (impl.Name is "OutboxArchivalService" or "DailySettlementService"
-                        || impl.Name.Contains("LeaderElection", StringComparison.Ordinal)))
+                    && d.ImplementationType?.FullName != webHost)
                 .ToList();
 
             foreach (var descriptor in background)

@@ -3,6 +3,7 @@ namespace Moongazing.OrionShowcase.Infrastructure.Outbox;
 using System.Reflection;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Diagnostics;
+using Microsoft.Extensions.DependencyInjection;
 using Moongazing.OrionPatch.Abstractions;
 using Moongazing.OrionShowcase.Domain.Abstractions;
 
@@ -28,17 +29,22 @@ using Moongazing.OrionShowcase.Domain.Abstractions;
 /// </remarks>
 public sealed class DomainEventOutboxAdapter : SaveChangesInterceptor
 {
-    private readonly IOutbox outbox;
+    private readonly IServiceProvider serviceProvider;
     private readonly List<object> processedAggregates = new();
 
     private static readonly MethodInfo EnqueueMethod = typeof(IOutbox)
         .GetMethod(nameof(IOutbox.Enqueue))
         ?? throw new InvalidOperationException("IOutbox.Enqueue method not found.");
 
-    public DomainEventOutboxAdapter(IOutbox outbox)
+    // Takes the scoped service provider rather than IOutbox directly. The interceptor is attached to
+    // the BankingDbContext options and is resolved while those options are being built; OrionPatch's
+    // IOutbox depends on the BankingDbContext, so injecting IOutbox here would form a construction
+    // cycle (DbContext -> options -> adapter -> IOutbox -> DbContext) that deadlocks resolution. The
+    // outbox is only needed at save time, so it is resolved lazily from the same scope in Flush.
+    public DomainEventOutboxAdapter(IServiceProvider serviceProvider)
     {
-        ArgumentNullException.ThrowIfNull(outbox);
-        this.outbox = outbox;
+        ArgumentNullException.ThrowIfNull(serviceProvider);
+        this.serviceProvider = serviceProvider;
     }
 
     public override InterceptionResult<int> SavingChanges(
@@ -107,6 +113,10 @@ public sealed class DomainEventOutboxAdapter : SaveChangesInterceptor
             .Where(IsAggregateRoot)
             .ToList();
 
+        // Resolved lazily (and only when there is at least one event to enqueue) from the scope the
+        // DbContext lives in, so the interceptor's construction does not depend on IOutbox.
+        IOutbox? outbox = null;
+
         foreach (var aggregate in aggregates)
         {
             var events = GetDomainEvents(aggregate);
@@ -115,9 +125,10 @@ public sealed class DomainEventOutboxAdapter : SaveChangesInterceptor
                 continue;
             }
 
+            outbox ??= serviceProvider.GetRequiredService<IOutbox>();
             foreach (var domainEvent in events)
             {
-                EnqueueDomainEvent(domainEvent);
+                EnqueueDomainEvent(outbox, domainEvent);
             }
 
             processedAggregates.Add(aggregate);
@@ -133,7 +144,7 @@ public sealed class DomainEventOutboxAdapter : SaveChangesInterceptor
         processedAggregates.Clear();
     }
 
-    private void EnqueueDomainEvent(object domainEvent)
+    private static void EnqueueDomainEvent(IOutbox outbox, object domainEvent)
     {
         // IOutbox.Enqueue<T>(T message, OutboxEnqueueOptions? options = null) where T : class
         // Bind T to the runtime type so OrionPatch's MessageTypeNameResolver records
