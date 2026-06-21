@@ -40,39 +40,20 @@ jobs:
       - name: Unit tests (exclude IntegrationTests which need Testcontainers)
         run: dotnet test Moongazing.OrionShowcase.sln -c Release --no-build --logger "console;verbosity=normal" --filter "FullyQualifiedName!~IntegrationTests"
 
-      # Integration tests are wired to run against the services Postgres above: BankingApiFixture
+      # End-to-end integration tests against the services Postgres above. BankingApiFixture
       # provisions a unique database per test class when BANKING_TEST_POSTGRES is set (no Docker-in-
-      # Docker / Testcontainers race), the assembly runs sequentially, and the timer-based hosted
-      # services are disabled in the test host. They are NOT yet enabled in CI because the very first
-      # end-to-end test (RegisterAndOpenAccountTests) currently hangs against a real Postgres; these
-      # tests had never actually executed anywhere before (no Docker locally, disabled here), so the
-      # hang is a genuine latent issue to diagnose. Tracked in docs/ROADMAP.md. To enable once fixed,
-      # flip `if: false` to a real run with the env + filter below:
-      #   env: { BANKING_TEST_POSTGRES: "Host=localhost;Port=5432;Username=bank;Password=bank;Database=banking_ci" }
-      #   run: dotnet test ... --filter "FullyQualifiedName~IntegrationTests" --blame-hang-timeout 120s
-      - name: Integration tests (DIAGNOSTIC - collect hang dump)
-        id: integration
+      # Docker / Testcontainers race), the assembly runs sequentially, and the app background services
+      # are disabled in the test host. The host-startup deadlock that used to hang the whole suite (a
+      # DbContext/outbox interceptor construction cycle) is fixed, so the suite now runs. It is marked
+      # continue-on-error while the remaining scenario failures are worked through (currently an
+      # OrionVault limitation: it cannot encrypt the value-object Customer.NationalId (Tckn), only
+      # string/byte[]). A blame-hang timeout guards against any future stall. See docs/ROADMAP.md.
+      - name: Integration tests (end-to-end against the services Postgres)
         continue-on-error: true
         timeout-minutes: 8
         env:
           BANKING_TEST_POSTGRES: "Host=localhost;Port=5432;Username=bank;Password=bank;Database=banking_ci"
-        run: dotnet test Moongazing.OrionShowcase.sln -c Release --no-build --logger "console;verbosity=normal" --filter "FullyQualifiedName~IntegrationTests" --blame-hang-timeout 90s --blame-hang-dump-type full
-
-      - name: Analyze hang dump (managed stacks of the stalled test host)
-        if: always()
-        run: |
-          dotnet tool install -g dotnet-dump >/dev/null 2>&1 || true
-          export PATH="$PATH:$HOME/.dotnet/tools"
-          DUMP=$(find . -name "*.dmp" 2>/dev/null | head -1)
-          echo "dump file: ${DUMP:-<none>}"
-          if [ -n "$DUMP" ]; then
-            echo "===== PENDING ASYNC ====="
-            dotnet-dump analyze "$DUMP" -c "dumpasync -completed" -c "exit" 2>&1 | head -150
-            echo "===== ALL THREAD STACKS ====="
-            dotnet-dump analyze "$DUMP" -c "clrstack -all" -c "exit" 2>&1 | head -400
-          else
-            echo "No hang dump produced - the integration suite did not stall."
-          fi
+        run: dotnet test Moongazing.OrionShowcase.sln -c Release --no-build --logger "console;verbosity=normal" --filter "FullyQualifiedName~IntegrationTests" --blame-hang-timeout 90s --blame-hang-dump-type none
 
   publish-docker:
     needs: build-and-test
