@@ -61,7 +61,11 @@ public sealed class Account : AggregateRoot<AccountId>
         {
             Id = ids.NewId(),
             Kind = TransactionKind.Deposit,
-            Amount = amount,
+            // A fresh Money instance: a transfer passes one amount object to both the withdrawal and
+            // the deposit, and EF Core cannot track the same owned value under two different
+            // transactions, so it would drop the amount column. A per-transaction copy keeps them
+            // independent.
+            Amount = new Money(amount.Amount, amount.Currency),
             BalanceAfter = Balance,
             IdempotencyKey = key,
             At = clock.UtcNow
@@ -83,7 +87,9 @@ public sealed class Account : AggregateRoot<AccountId>
         {
             Id = ids.NewId(),
             Kind = TransactionKind.Withdrawal,
-            Amount = amount,
+            // Fresh Money instance per transaction (see Deposit): the same amount object reaches both
+            // sides of a transfer, and EF cannot share one owned value across two transactions.
+            Amount = new Money(amount.Amount, amount.Currency),
             BalanceAfter = Balance,
             IdempotencyKey = key,
             At = clock.UtcNow
