@@ -26,7 +26,7 @@ public sealed class CustomerRepository : ICustomerRepository
         await _db.Customers.AddAsync(customer, cancellationToken).ConfigureAwait(false);
     }
 
-    public Task<bool> ExistsByNationalIdAsync(Tckn nationalId, CancellationToken cancellationToken)
+    public async Task<bool> ExistsByNationalIdAsync(Tckn nationalId, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(nationalId);
 
@@ -34,7 +34,11 @@ public sealed class CustomerRepository : ICustomerRepository
         // against the indexed bytea column. Equality on the deterministic digest stands in for
         // equality on the (otherwise unsearchable) randomized ciphertext of the national id.
         var probes = _nationalIdIndexer.ComputeAllVersions(nationalId);
-        return _db.Customers.AnyAsync(c => probes.Contains(c.NationalIdIndex), cancellationToken);
+        var exists = await _db.Customers.AnyAsync(c => probes.Contains(c.NationalIdIndex), cancellationToken).ConfigureAwait(false);
+        var total = await _db.Customers.CountAsync(cancellationToken).ConfigureAwait(false);
+        var nullProbes = probes.Count(p => p is null);
+        Console.Error.WriteLine($"[DIAG-EXISTS] db={_db.Database.GetDbConnection().Database} probes={probes.Count} nullProbes={nullProbes} totalCustomers={total} exists={exists}");
+        return exists;
     }
 
     public Task<Customer?> FindByNationalIdAsync(Tckn nationalId, CancellationToken cancellationToken)

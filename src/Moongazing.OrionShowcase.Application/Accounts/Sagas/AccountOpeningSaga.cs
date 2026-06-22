@@ -132,6 +132,7 @@ public sealed partial class AccountOpeningSaga
         }
 
         var customer = await _customers.GetAsync(ctx.CustomerId, ct).ConfigureAwait(false);
+        Console.Error.WriteLine($"[DIAG-SAGA] validate customer id={ctx.CustomerId.Value} found={customer is not null}");
         if (customer is null)
         {
             throw new InvalidOperationException($"Customer '{ctx.CustomerId.Value}' was not found.");
