@@ -50,7 +50,7 @@ public class WithdrawMoneyHandlerTests
         repo.Store[account.Id] = account;
         var distributed = new StubDistributedLock();
         var readerWriter = new StubSharedExclusiveLock();
-        var sut = new WithdrawMoneyHandler(repo, uow, distributed, readerWriter, clock);
+        var sut = new WithdrawMoneyHandler(repo, uow, distributed, readerWriter, new StubTransactionIdGenerator(), clock);
 
         var cmd = new WithdrawMoneyCommand(
             AccountId: account.Id,
@@ -79,7 +79,7 @@ public class WithdrawMoneyHandlerTests
         var uow = new CountingUow();
         var account = NewActiveAccount(clock, opening: 10m);
         repo.Store[account.Id] = account;
-        var sut = new WithdrawMoneyHandler(repo, uow, new StubDistributedLock(), new StubSharedExclusiveLock(), clock);
+        var sut = new WithdrawMoneyHandler(repo, uow, new StubDistributedLock(), new StubSharedExclusiveLock(), new StubTransactionIdGenerator(), clock);
 
         var cmd = new WithdrawMoneyCommand(
             AccountId: account.Id,

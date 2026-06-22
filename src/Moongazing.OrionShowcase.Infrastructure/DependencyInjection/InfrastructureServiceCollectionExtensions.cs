@@ -25,6 +25,7 @@ using Moongazing.OrionShowcase.Domain.Repositories;
 using Moongazing.OrionShowcase.Infrastructure.Audit;
 using Moongazing.OrionShowcase.Infrastructure.HostedServices;
 using Moongazing.OrionShowcase.Infrastructure.Idempotency;
+using Moongazing.OrionShowcase.Infrastructure.Ids;
 using Moongazing.OrionShowcase.Infrastructure.Limits;
 using Moongazing.OrionShowcase.Infrastructure.Outbox;
 using Moongazing.OrionShowcase.Infrastructure.Persistence;
@@ -135,6 +136,10 @@ public static class InfrastructureServiceCollectionExtensions
         services.AddSingleton<SystemClock>();
         services.AddSingleton<IClock>(sp => sp.GetRequiredService<SystemClock>());
         services.AddSingleton<Moongazing.Orion.Abstractions.Time.IOrionClock>(sp => sp.GetRequiredService<SystemClock>());
+        // Snowflake-backed transaction ids. Stateless and thread-safe (OrionKey is a process-global
+        // generator configured below), so a singleton mirrors the clock's lifetime. Assigning ids in
+        // the domain keeps each Transaction's PK distinct, so a transfer's two entries do not collide.
+        services.AddSingleton<ITransactionIdGenerator, OrionKeyTransactionIdGenerator>();
 
         // OrionLock with Postgres pg_try_advisory_lock backend. This is the REAL cross-replica
         // safety mechanism: the exclusive-only IDistributedLock it registers serializes balance

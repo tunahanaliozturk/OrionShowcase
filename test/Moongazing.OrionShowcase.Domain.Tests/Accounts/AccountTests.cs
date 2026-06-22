@@ -11,6 +11,14 @@ public class AccountTests
 {
     private sealed class FixedClock : IClock { public DateTimeOffset UtcNow { get; init; } = DateTimeOffset.UnixEpoch; }
 
+    // Deterministic monotonic id source so each recorded transaction gets a distinct id, matching the
+    // production generator's uniqueness guarantee without depending on OrionKey from the Domain tests.
+    private sealed class SequentialIds : ITransactionIdGenerator
+    {
+        private long _next;
+        public TransactionId NewId() => new(++_next);
+    }
+
     private static Account Open(decimal amount = 100m, Currency c = Currency.TRY) =>
         Account.Open(
             new CustomerId(Guid.NewGuid()),
@@ -33,7 +41,7 @@ public class AccountTests
         var account = Open(100m);
         account.ClearDomainEvents();
 
-        account.Deposit(new Money(50m, Currency.TRY), new IdempotencyKey("k1"), new FixedClock());
+        account.Deposit(new Money(50m, Currency.TRY), new IdempotencyKey("k1"), new SequentialIds(), new FixedClock());
 
         account.Balance.Should().Be(new Money(150m, Currency.TRY));
         account.Transactions.Should().ContainSingle(t => t.Kind == TransactionKind.Deposit);
@@ -44,7 +52,7 @@ public class AccountTests
     public void Deposit_with_different_currency_throws()
     {
         var account = Open(100m, Currency.TRY);
-        var act = () => account.Deposit(new Money(50m, Currency.USD), new IdempotencyKey("k1"), new FixedClock());
+        var act = () => account.Deposit(new Money(50m, Currency.USD), new IdempotencyKey("k1"), new SequentialIds(), new FixedClock());
         // Cross-currency Money arithmetic now surfaces via Contract.Invariant.
         act.Should().Throw<ContractException>();
     }
@@ -53,7 +61,7 @@ public class AccountTests
     public void Withdraw_decreases_balance()
     {
         var account = Open(100m);
-        account.Withdraw(new Money(40m, Currency.TRY), new IdempotencyKey("k1"), new FixedClock());
+        account.Withdraw(new Money(40m, Currency.TRY), new IdempotencyKey("k1"), new SequentialIds(), new FixedClock());
         account.Balance.Should().Be(new Money(60m, Currency.TRY));
     }
 
@@ -61,7 +69,7 @@ public class AccountTests
     public void Withdraw_more_than_balance_throws_InsufficientFundsException()
     {
         var account = Open(100m);
-        var act = () => account.Withdraw(new Money(150m, Currency.TRY), new IdempotencyKey("k1"), new FixedClock());
+        var act = () => account.Withdraw(new Money(150m, Currency.TRY), new IdempotencyKey("k1"), new SequentialIds(), new FixedClock());
         act.Should().Throw<InsufficientFundsException>();
     }
 
@@ -71,7 +79,7 @@ public class AccountTests
         var account = Open(100m);
         account.Freeze("manual review", new FixedClock());
         account.Status.Should().Be(AccountStatus.Frozen);
-        var act = () => account.Deposit(new Money(10m, Currency.TRY), new IdempotencyKey("k1"), new FixedClock());
+        var act = () => account.Deposit(new Money(10m, Currency.TRY), new IdempotencyKey("k1"), new SequentialIds(), new FixedClock());
         act.Should().Throw<AccountNotActiveException>();
     }
 

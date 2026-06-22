@@ -40,7 +40,7 @@ public sealed class Account : AggregateRoot<AccountId>
         return account;
     }
 
-    public void Deposit(Money amount, IdempotencyKey key, IClock clock)
+    public void Deposit(Money amount, IdempotencyKey key, ITransactionIdGenerator ids, IClock clock)
     {
         // Demonstration site for FluentGuard: a single chain handles null + the
         // "positive-amount" business rule. NotNull throws first if amount is null;
@@ -49,12 +49,17 @@ public sealed class Account : AggregateRoot<AccountId>
             .NotNull()
             .Must(static m => m.Amount > 0m, "Deposit amount must be positive.")
             .Build();
+        Ensure.NotNull(ids);
         Ensure.NotNull(clock);
         EnsureActive(nameof(Deposit));
         Balance += amount;
+        // Each ledger entry gets a unique id from the injected generator. A money transfer adds two
+        // transactions (this deposit plus the withdrawal on the source account) in a single
+        // SaveChanges, so a shared/sentinel id would collide the entities' owned Money tracking and the
+        // PK; a distinct id per call keeps both rows independent.
         _transactions.Add(new Transaction
         {
-            Id = new TransactionId(0),
+            Id = ids.NewId(),
             Kind = TransactionKind.Deposit,
             Amount = amount,
             BalanceAfter = Balance,
@@ -64,9 +69,10 @@ public sealed class Account : AggregateRoot<AccountId>
         Raise(new MoneyDeposited(Id, amount, Balance, key, clock.UtcNow));
     }
 
-    public void Withdraw(Money amount, IdempotencyKey key, IClock clock)
+    public void Withdraw(Money amount, IdempotencyKey key, ITransactionIdGenerator ids, IClock clock)
     {
         Ensure.NotNull(amount);
+        Ensure.NotNull(ids);
         Ensure.NotNull(clock);
         EnsureActive(nameof(Withdraw));
         // Domain rule: insufficient funds is a business exception (not a precondition
@@ -75,7 +81,7 @@ public sealed class Account : AggregateRoot<AccountId>
         Balance -= amount;
         _transactions.Add(new Transaction
         {
-            Id = new TransactionId(0),
+            Id = ids.NewId(),
             Kind = TransactionKind.Withdrawal,
             Amount = amount,
             BalanceAfter = Balance,

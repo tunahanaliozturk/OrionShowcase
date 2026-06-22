@@ -16,6 +16,7 @@ public sealed class WithdrawMoneyHandler
     private readonly IUnitOfWork _uow;
     private readonly IDistributedLock _locker;
     private readonly ISharedExclusiveLock _readerWriter;
+    private readonly ITransactionIdGenerator _ids;
     private readonly IClock _clock;
 
     public WithdrawMoneyHandler(
@@ -23,12 +24,14 @@ public sealed class WithdrawMoneyHandler
         IUnitOfWork uow,
         IDistributedLock locker,
         ISharedExclusiveLock readerWriter,
+        ITransactionIdGenerator ids,
         IClock clock)
     {
         _accounts = accounts;
         _uow = uow;
         _locker = locker;
         _readerWriter = readerWriter;
+        _ids = ids;
         _clock = clock;
     }
 
@@ -66,7 +69,7 @@ public sealed class WithdrawMoneyHandler
         var amount = new Money(request.Amount, request.Currency);
         try
         {
-            account.Withdraw(amount, request.IdempotencyKey, _clock);
+            account.Withdraw(amount, request.IdempotencyKey, _ids, _clock);
         }
         catch (InsufficientFundsException ex)
         {

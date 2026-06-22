@@ -87,7 +87,7 @@ public class OpenAccountHandlerTests
             "Test Customer", new Tckn("10000000146"), new byte[] { 1, 2, 3 }, "test@example.com", "+905551234567", clock);
 
         var saga = new AccountOpeningSaga(
-            accounts, customers, uow, limits, clock, NullLogger<AccountOpeningSaga>.Instance);
+            accounts, customers, uow, limits, new StubTransactionIdGenerator(), clock, NullLogger<AccountOpeningSaga>.Instance);
         return (new OpenAccountHandler(saga), accounts, uow, limits);
     }
 

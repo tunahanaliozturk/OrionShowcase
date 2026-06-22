@@ -122,7 +122,7 @@ public class TransferMoneyHandlerTests
         repo.Store[from.Id] = from;
         repo.Store[to.Id] = to;
 
-        var sut = new TransferMoneyHandler(repo, uow, distributed, readerWriter, clock);
+        var sut = new TransferMoneyHandler(repo, uow, distributed, readerWriter, new StubTransactionIdGenerator(), clock);
 
         var cmd = new TransferMoneyCommand(
             From: from.Id,
@@ -167,7 +167,7 @@ public class TransferMoneyHandlerTests
         repo.Store[from.Id] = from;
         repo.Store[to.Id] = to;
 
-        var sut = new TransferMoneyHandler(repo, uow, distributed, readerWriter, clock);
+        var sut = new TransferMoneyHandler(repo, uow, distributed, readerWriter, new StubTransactionIdGenerator(), clock);
 
         var cmd = new TransferMoneyCommand(
             From: from.Id,

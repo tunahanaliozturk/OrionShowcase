@@ -50,7 +50,7 @@ public class DepositMoneyHandlerTests
         repo.Store[account.Id] = account;
         var distributed = new StubDistributedLock();
         var readerWriter = new StubSharedExclusiveLock();
-        var sut = new DepositMoneyHandler(repo, uow, distributed, readerWriter, clock);
+        var sut = new DepositMoneyHandler(repo, uow, distributed, readerWriter, new StubTransactionIdGenerator(), clock);
 
         var cmd = new DepositMoneyCommand(
             AccountId: account.Id,
@@ -77,7 +77,7 @@ public class DepositMoneyHandlerTests
         var clock = new FixedClock();
         var repo = new FakeAccountRepo();
         var uow = new CountingUow();
-        var sut = new DepositMoneyHandler(repo, uow, new StubDistributedLock(), new StubSharedExclusiveLock(), clock);
+        var sut = new DepositMoneyHandler(repo, uow, new StubDistributedLock(), new StubSharedExclusiveLock(), new StubTransactionIdGenerator(), clock);
 
         var cmd = new DepositMoneyCommand(
             AccountId: new AccountId(Guid.NewGuid()),
