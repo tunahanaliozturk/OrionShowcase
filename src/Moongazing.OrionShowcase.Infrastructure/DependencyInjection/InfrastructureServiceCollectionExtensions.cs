@@ -2,7 +2,6 @@ namespace Moongazing.OrionShowcase.Infrastructure.DependencyInjection;
 
 using System.Globalization;
 using Microsoft.EntityFrameworkCore;
-using Microsoft.EntityFrameworkCore.Diagnostics;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Moongazing.OrionAudit;
@@ -126,14 +125,6 @@ public static class InfrastructureServiceCollectionExtensions
             opt.AddInterceptors(sp.GetRequiredService<DomainEventOutboxAdapter>());
             opt.UseOrionPatch(sp);
             opt.UseOrionAudit(sp);
-            // OrionVault, OrionPatch and OrionAudit apply their value converters / interceptors via a
-            // runtime model customizer that does not run during design-time migration scaffolding, so
-            // the runtime model legitimately differs from the migration snapshot even though the SQL
-            // schema is identical (encryption is value-level, not column-level). EF Core 9 escalates
-            // PendingModelChangesWarning to an error inside Database.Migrate(); ignore it so startup
-            // migration succeeds. Called LAST so an Orion Use* extension cannot reset it. The schema
-            // itself is still validated by the migrations.
-            opt.ConfigureWarnings(w => w.Ignore(RelationalEventId.PendingModelChangesWarning));
         });
 
         services.AddScoped<IAccountRepository, AccountRepository>();
