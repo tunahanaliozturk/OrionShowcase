@@ -29,7 +29,6 @@ public sealed class BankingApiFixture : WebApplicationFactory<Program>, IAsyncLi
 
     public BankingApiFixture()
     {
-        Console.Error.WriteLine($"[DIAG-FIX] envSet={!string.IsNullOrWhiteSpace(_serverConnectionString)} value='{_serverConnectionString}'");
         if (string.IsNullOrWhiteSpace(_serverConnectionString))
         {
             _container = new PostgreSqlBuilder()
@@ -153,7 +152,6 @@ public sealed class BankingApiFixture : WebApplicationFactory<Program>, IAsyncLi
     private void ApplyConnectionString()
     {
         Environment.SetEnvironmentVariable("ConnectionStrings__Banking", _connectionString);
-        Console.Error.WriteLine($"[DIAG-FIX] applied ConnectionStrings__Banking db={new NpgsqlConnectionStringBuilder(_connectionString).Database}");
     }
 
     public new async Task DisposeAsync()

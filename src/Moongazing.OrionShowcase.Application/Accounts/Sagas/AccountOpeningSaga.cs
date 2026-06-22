@@ -132,9 +132,6 @@ public sealed partial class AccountOpeningSaga
         }
 
         var customer = await _customers.GetAsync(ctx.CustomerId, ct).ConfigureAwait(false);
-#pragma warning disable CA1849
-        Console.Error.WriteLine($"[DIAG-SAGA] validate customer id={ctx.CustomerId.Value} found={customer is not null}");
-#pragma warning restore CA1849
         if (customer is null)
         {
             throw new InvalidOperationException($"Customer '{ctx.CustomerId.Value}' was not found.");
