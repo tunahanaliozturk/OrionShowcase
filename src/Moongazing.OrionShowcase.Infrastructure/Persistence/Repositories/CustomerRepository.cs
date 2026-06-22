@@ -37,7 +37,9 @@ public sealed class CustomerRepository : ICustomerRepository
         var exists = await _db.Customers.AnyAsync(c => probes.Contains(c.NationalIdIndex), cancellationToken).ConfigureAwait(false);
         var total = await _db.Customers.CountAsync(cancellationToken).ConfigureAwait(false);
         var nullProbes = probes.Count(p => p is null);
+#pragma warning disable CA1849
         Console.Error.WriteLine($"[DIAG-EXISTS] db={_db.Database.GetDbConnection().Database} probes={probes.Count} nullProbes={nullProbes} totalCustomers={total} exists={exists}");
+#pragma warning restore CA1849
         return exists;
     }
 
