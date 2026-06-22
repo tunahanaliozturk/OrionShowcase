@@ -33,6 +33,7 @@ public sealed partial class AccountOpeningSaga
     private readonly ICustomerRepository _customers;
     private readonly IUnitOfWork _uow;
     private readonly IAccountLimitRegistry _limits;
+    private readonly ITransactionIdGenerator _ids;
     private readonly IClock _clock;
     private readonly ILogger<AccountOpeningSaga> _log;
 
@@ -49,6 +50,7 @@ public sealed partial class AccountOpeningSaga
         ICustomerRepository customers,
         IUnitOfWork uow,
         IAccountLimitRegistry limits,
+        ITransactionIdGenerator ids,
         IClock clock,
         ILogger<AccountOpeningSaga> log)
     {
@@ -56,6 +58,7 @@ public sealed partial class AccountOpeningSaga
         _customers = customers;
         _uow = uow;
         _limits = limits;
+        _ids = ids;
         _clock = clock;
         _log = log;
     }
@@ -167,7 +170,7 @@ public sealed partial class AccountOpeningSaga
         // non-zero balance, so a non-zero opening deposit is withdrawn first to leave it empty.
         if (account.Balance.Amount != 0m)
         {
-            account.Withdraw(account.Balance, ctx.IdempotencyKey, _clock);
+            account.Withdraw(account.Balance, ctx.IdempotencyKey, _ids, _clock);
         }
         account.Close(_clock);
         await _uow.SaveChangesAsync(ct).ConfigureAwait(false);

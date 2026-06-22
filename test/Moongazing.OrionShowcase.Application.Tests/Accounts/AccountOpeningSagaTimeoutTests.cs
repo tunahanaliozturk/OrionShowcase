@@ -69,7 +69,7 @@ public class AccountOpeningSagaTimeoutTests
         customers.Store[existing] = Customer.Register(
             "Test Customer", new Tckn("10000000146"), new byte[] { 1, 2, 3 }, "test@example.com", "+905551234567", clock);
 
-        var saga = new AccountOpeningSaga(accounts, customers, uow, limits, clock, NullLogger<AccountOpeningSaga>.Instance);
+        var saga = new AccountOpeningSaga(accounts, customers, uow, limits, new StubTransactionIdGenerator(), clock, NullLogger<AccountOpeningSaga>.Instance);
         return (saga, accounts, uow);
     }
 

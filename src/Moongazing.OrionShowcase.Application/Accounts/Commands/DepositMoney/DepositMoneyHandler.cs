@@ -17,6 +17,7 @@ public sealed class DepositMoneyHandler
     private readonly IUnitOfWork _uow;
     private readonly IDistributedLock _locker;
     private readonly ISharedExclusiveLock _readerWriter;
+    private readonly ITransactionIdGenerator _ids;
     private readonly IClock _clock;
 
     public DepositMoneyHandler(
@@ -24,12 +25,14 @@ public sealed class DepositMoneyHandler
         IUnitOfWork uow,
         IDistributedLock locker,
         ISharedExclusiveLock readerWriter,
+        ITransactionIdGenerator ids,
         IClock clock)
     {
         _accounts = accounts;
         _uow = uow;
         _locker = locker;
         _readerWriter = readerWriter;
+        _ids = ids;
         _clock = clock;
     }
 
@@ -67,7 +70,7 @@ public sealed class DepositMoneyHandler
         var amount = new Money(request.Amount, request.Currency);
         try
         {
-            account.Deposit(amount, request.IdempotencyKey, _clock);
+            account.Deposit(amount, request.IdempotencyKey, _ids, _clock);
         }
         catch (AccountNotActiveException ex)
         {

@@ -64,7 +64,14 @@ public class NationalIdUniquenessTests : IClassFixture<BankingApiFixture>
             idempotencyKey = Guid.NewGuid().ToString("N"),
         });
 
-        secondRes.StatusCode.Should().BeOneOf(HttpStatusCode.BadRequest, HttpStatusCode.Conflict);
+        // OrionGuard surfaces the uniqueness-validation failure as 422 Unprocessable Entity, which is
+        // the correct status for a well-formed request that violates a domain rule. Accept the other
+        // rejection codes too so the test stays robust to how the duplicate is reported - the point is
+        // that the second registration is rejected, not the exact 4xx code.
+        secondRes.StatusCode.Should().BeOneOf(
+            HttpStatusCode.BadRequest,
+            HttpStatusCode.Conflict,
+            HttpStatusCode.UnprocessableEntity);
     }
 
     private sealed record TokenBody(string AccessToken);

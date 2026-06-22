@@ -18,6 +18,7 @@ public sealed class TransferMoneyHandler
     private readonly IUnitOfWork _uow;
     private readonly IDistributedLock _locker;
     private readonly ISharedExclusiveLock _readerWriter;
+    private readonly ITransactionIdGenerator _ids;
     private readonly IClock _clock;
 
     public TransferMoneyHandler(
@@ -25,12 +26,14 @@ public sealed class TransferMoneyHandler
         IUnitOfWork uow,
         IDistributedLock locker,
         ISharedExclusiveLock readerWriter,
+        ITransactionIdGenerator ids,
         IClock clock)
     {
         _accounts = accounts;
         _uow = uow;
         _locker = locker;
         _readerWriter = readerWriter;
+        _ids = ids;
         _clock = clock;
     }
 
@@ -96,8 +99,8 @@ public sealed class TransferMoneyHandler
 
         try
         {
-            from.Withdraw(request.Amount, request.IdempotencyKey, _clock);
-            to.Deposit(request.Amount, request.IdempotencyKey, _clock);
+            from.Withdraw(request.Amount, request.IdempotencyKey, _ids, _clock);
+            to.Deposit(request.Amount, request.IdempotencyKey, _ids, _clock);
             from.RecordTransfer(to.Id, request.Amount, request.IdempotencyKey, _clock);
         }
         catch (InsufficientFundsException ex)

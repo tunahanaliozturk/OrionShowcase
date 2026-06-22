@@ -82,6 +82,16 @@ public sealed class BankingApiFixture : WebApplicationFactory<Program>, IAsyncLi
     {
         ArgumentNullException.ThrowIfNull(builder);
 
+        // appsettings.json hard-codes ConnectionStrings:Banking (Database=banking). The override in
+        // CreateHost is registered before that file, so it loses; applied here (a ConfigureWebHost
+        // app-configuration source runs after the application's own appsettings) it wins, so the app
+        // actually targets the per-test database this fixture provisioned.
+        builder.ConfigureAppConfiguration((_, cfg) =>
+            cfg.AddInMemoryCollection(new Dictionary<string, string?>
+            {
+                ["ConnectionStrings:Banking"] = _connectionString,
+            }));
+
         builder.ConfigureTestServices(services =>
         {
             // Remove every application background service from the test host, keeping only the
@@ -111,6 +121,7 @@ public sealed class BankingApiFixture : WebApplicationFactory<Program>, IAsyncLi
         {
             await _container.StartAsync().ConfigureAwait(false);
             _connectionString = _container.GetConnectionString();
+            ApplyConnectionString();
             return;
         }
 
@@ -131,6 +142,16 @@ public sealed class BankingApiFixture : WebApplicationFactory<Program>, IAsyncLi
         create.CommandText = $"CREATE DATABASE \"{_provisionedDatabase}\"";
 #pragma warning restore CA2100
         await create.ExecuteNonQueryAsync().ConfigureAwait(false);
+        ApplyConnectionString();
+    }
+
+    // The app's appsettings.json hard-codes ConnectionStrings:Banking and beats the in-memory
+    // overrides under WebApplicationFactory's configuration ordering. Setting it as an environment
+    // variable wins, because the default host configuration adds environment variables after
+    // appsettings. The suite runs non-parallel, so this process-wide variable is safe per class.
+    private void ApplyConnectionString()
+    {
+        Environment.SetEnvironmentVariable("ConnectionStrings__Banking", _connectionString);
     }
 
     public new async Task DisposeAsync()

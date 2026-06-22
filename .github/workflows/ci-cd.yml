@@ -12,6 +12,11 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: read
+    env:
+      # Job-level so it reliably reaches the dotnet test host process (which can run with a
+      # sanitized environment that does not inherit step-level env vars). The integration fixture
+      # provisions a unique database per test class on this server.
+      BANKING_TEST_POSTGRES: "Host=localhost;Port=5432;Username=bank;Password=bank;Database=banking_ci"
     strategy:
       matrix:
         dotnet: ['8.0.x']
@@ -42,14 +47,12 @@ jobs:
 
       # End-to-end integration tests against the services Postgres above. BankingApiFixture
       # provisions a unique database per test class when BANKING_TEST_POSTGRES is set (no Docker-in-
-      # Docker / Testcontainers race), the assembly runs sequentially, and the app background services
-      # are disabled in the test host. The host-startup deadlock that used to hang the whole suite (a
-      # DbContext/outbox interceptor construction cycle) is fixed, so the suite now runs. It is marked
-      # continue-on-error while the remaining scenario failures are worked through (currently an
-      # OrionVault limitation: it cannot encrypt the value-object Customer.NationalId (Tckn), only
-      # string/byte[]). A blame-hang timeout guards against any future stall. See docs/ROADMAP.md.
+      # Docker / Testcontainers race), the assembly runs sequentially, the app background services
+      # are disabled in the test host, and a unique database is provisioned per test class. The full
+      # register/open/transfer, PII-at-rest, national-id uniqueness, SSE resume, and outbox/webhook
+      # dead-letter flows run end-to-end against a real Postgres. A blame-hang timeout guards against
+      # any future stall.
       - name: Integration tests (end-to-end against the services Postgres)
-        continue-on-error: true
         timeout-minutes: 8
         env:
           BANKING_TEST_POSTGRES: "Host=localhost;Port=5432;Username=bank;Password=bank;Database=banking_ci"
