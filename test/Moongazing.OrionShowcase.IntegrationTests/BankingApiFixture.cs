@@ -83,6 +83,16 @@ public sealed class BankingApiFixture : WebApplicationFactory<Program>, IAsyncLi
     {
         ArgumentNullException.ThrowIfNull(builder);
 
+        // appsettings.json hard-codes ConnectionStrings:Banking (Database=banking). The override in
+        // CreateHost is registered before that file, so it loses; applied here (a ConfigureWebHost
+        // app-configuration source runs after the application's own appsettings) it wins, so the app
+        // actually targets the per-test database this fixture provisioned.
+        builder.ConfigureAppConfiguration((_, cfg) =>
+            cfg.AddInMemoryCollection(new Dictionary<string, string?>
+            {
+                ["ConnectionStrings:Banking"] = _connectionString,
+            }));
+
         builder.ConfigureTestServices(services =>
         {
             // Remove every application background service from the test host, keeping only the
