@@ -4,7 +4,7 @@ OrionShowcase is the reference banking sample for the Moongazing.Orion family. T
 
 ## Current state (2026-06)
 
-The whole Orion family is integrated end-to-end. A single transfer request fans out through OrionGuard validation, OrionKey id generation, OrionLock account locks, OrionAudit entity-diff capture, OrionPatch outbox, OrionVault PII decryption, and the cross-cutting and event-level packages (OrionLens, OrionShade, OrionGrant, OrionLedger, OrionOnce, OrionSaga, OrionRelay, OrionStream, OrionBeacon, Orion.Abstractions).
+The whole Orion family is integrated across the sample, each package on the path that fits it. A transfer request exercises OrionGuard validation, OrionKey id generation, OrionLock account locks, OrionAudit entity-diff capture, OrionPatch outbox, OrionVault PII handling, and the OrionStream/webhook side effects. The remaining packages run elsewhere: OrionShade redacts during customer registration, OrionLedger authenticates partner API-key endpoints, OrionBeacon gates the daily settlement service, and OrionSaga, OrionRelay, OrionOnce, OrionLens, OrionGrant, and Orion.Abstractions are wired across the relevant flows and cross-cutting concerns.
 
 The end-to-end integration suite now runs in CI against a real PostgreSQL 16 and is green (13 tests across 8 scenario classes). Before this, the integration tests existed but had never actually executed in CI. Standing them up surfaced and fixed several latent bugs:
 
