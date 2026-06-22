@@ -34,7 +34,9 @@ public sealed class OpenAccountHandler
 
         if (!result.Succeeded)
         {
+#pragma warning disable CA1849
             System.Console.Error.WriteLine($"[DIAG-OPEN] saga failed step={result.FailedStep} timedOut={result.TimedOut} cancelled={result.Cancelled} reason={result.Failure?.Message}");
+#pragma warning restore CA1849
             // The saga rolled back the completed steps. A per-step timeout or a cancellation is a
             // TRANSIENT operational outcome (slow dependency, shutdown, client abort), NOT a business
             // rejection. OrionSaga 0.2 separates these via TimedOut/Cancelled.
