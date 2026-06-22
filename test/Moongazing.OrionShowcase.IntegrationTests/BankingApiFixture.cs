@@ -122,6 +122,7 @@ public sealed class BankingApiFixture : WebApplicationFactory<Program>, IAsyncLi
         {
             await _container.StartAsync().ConfigureAwait(false);
             _connectionString = _container.GetConnectionString();
+            ApplyConnectionString();
             return;
         }
 
@@ -142,6 +143,17 @@ public sealed class BankingApiFixture : WebApplicationFactory<Program>, IAsyncLi
         create.CommandText = $"CREATE DATABASE \"{_provisionedDatabase}\"";
 #pragma warning restore CA2100
         await create.ExecuteNonQueryAsync().ConfigureAwait(false);
+        ApplyConnectionString();
+    }
+
+    // The app's appsettings.json hard-codes ConnectionStrings:Banking and beats the in-memory
+    // overrides under WebApplicationFactory's configuration ordering. Setting it as an environment
+    // variable wins, because the default host configuration adds environment variables after
+    // appsettings. The suite runs non-parallel, so this process-wide variable is safe per class.
+    private void ApplyConnectionString()
+    {
+        Environment.SetEnvironmentVariable("ConnectionStrings__Banking", _connectionString);
+        Console.Error.WriteLine($"[DIAG-FIX] applied ConnectionStrings__Banking db={new NpgsqlConnectionStringBuilder(_connectionString).Database}");
     }
 
     public new async Task DisposeAsync()
