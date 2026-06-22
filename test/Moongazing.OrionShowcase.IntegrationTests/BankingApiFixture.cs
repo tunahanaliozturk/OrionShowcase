@@ -29,6 +29,7 @@ public sealed class BankingApiFixture : WebApplicationFactory<Program>, IAsyncLi
 
     public BankingApiFixture()
     {
+        Console.Error.WriteLine($"[DIAG-FIX] envSet={!string.IsNullOrWhiteSpace(_serverConnectionString)} value='{_serverConnectionString}'");
         if (string.IsNullOrWhiteSpace(_serverConnectionString))
         {
             _container = new PostgreSqlBuilder()

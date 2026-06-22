@@ -12,6 +12,11 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: read
+    env:
+      # Job-level so it reliably reaches the dotnet test host process (which can run with a
+      # sanitized environment that does not inherit step-level env vars). The integration fixture
+      # provisions a unique database per test class on this server.
+      BANKING_TEST_POSTGRES: "Host=localhost;Port=5432;Username=bank;Password=bank;Database=banking_ci"
     strategy:
       matrix:
         dotnet: ['8.0.x']
